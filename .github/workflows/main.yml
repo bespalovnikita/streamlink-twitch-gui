@@ -4,6 +4,9 @@ on:
   push: {}
   pull_request: {}
 
+permissions:
+  contents: read
+
 env:
   CI: true
   NODE_VERSION: 20
@@ -43,7 +46,7 @@ jobs:
           key: nwjs-${{ matrix.os }}-${{ hashFiles('build/tasks/configs/nwjs.js') }}
       - name: Install dependencies
         shell: bash
-        run: yarn install --pure-lockfile --no-progress --non-interactive
+        run: yarn install --frozen-lockfile --no-progress --non-interactive
       - name: Test
         shell: bash
         run: |
@@ -63,6 +66,40 @@ jobs:
           name: os:${{ matrix.os }}
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  artifact:
+    name: Publish master artifact
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    needs:
+      - test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Prepare reproducible build
+        run: echo "SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)" >> "$GITHUB_ENV"
+      - name: Install dependencies
+        run: |
+          yarn install --frozen-lockfile --no-progress --non-interactive
+          sudo apt-get update
+          sudo apt-get install --yes pigz
+      - name: Build
+        run: yarn run grunt clean:tmp_prod webpack:prod
+      - name: Compile and package Linux x64
+        run: yarn run grunt clean:dist dist:archive_linux64
+      - name: Upload archive and checksums
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: streamlink-twitch-gui-linux64-${{ github.sha }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
 
   release:
     name: New release
@@ -84,7 +121,7 @@ jobs:
           echo "SOURCE_DATE_EPOCH=$(git show -s --format=%ct "${GITHUB_REF}")" >> $GITHUB_ENV
       - name: Install dependencies
         run: |
-          yarn install --pure-lockfile --no-progress --non-interactive
+          yarn install --frozen-lockfile --no-progress --non-interactive
           sudo apt-get install pigz nsis appstream{,-util}
           ./.github/workflows/install-wine.sh
       - name: Build

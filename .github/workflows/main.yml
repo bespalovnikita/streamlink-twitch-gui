@@ -61,6 +61,10 @@ jobs:
       - name: I18n
         if: startsWith(matrix.os, 'ubuntu')
         run: yarn run grunt webpack:i18n
+      - name: Prepare Windows build timestamp
+        if: runner.os == 'Windows'
+        shell: bash
+        run: echo "SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)" >> "$GITHUB_ENV"
       - name: Build
         run: yarn run grunt clean:tmp_prod webpack:prod
       - name: Compile Windows x64 application

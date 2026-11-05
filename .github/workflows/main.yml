@@ -68,8 +68,8 @@ jobs:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   artifact:
-    name: Publish main artifact
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    name: Publish master artifact
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     needs:
       - test
     runs-on: ubuntu-24.04

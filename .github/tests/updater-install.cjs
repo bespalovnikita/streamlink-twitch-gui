@@ -241,6 +241,12 @@ exec /usr/bin/mv "$@"
 			parentPid: parent.pid,
 			args: [ appScript, mode, current.profileDir, eventFile, ...literalArgs ]
 		} );
+	} catch ( error ) {
+		for ( const filename of [ "helper.log", "status.json" ] ) {
+			const log = path.join( job.jobDir, filename );
+			if ( fs.existsSync( log ) ) { context.diagnostic( fs.readFileSync( log, "utf8" ) ); }
+		}
+		throw error;
 	} finally { process.env.PATH = inheritedPath; }
 	assert.equal( fs.readFileSync( job.readyFile, "utf8" ), job.token );
 	assert.equal( fs.readFileSync( path.join( current.installDir, "old-file.txt" ), "utf8" ),
@@ -362,7 +368,7 @@ if ($length -eq 0) { exit 1 }
 [Console]::OutputEncoding = New-Object Text.UTF8Encoding($false)
 [Console]::Write($output.ToString())
 `;
-	const canonical = fs.realpathSync( current.installDir );
+	const canonical = await fs.promises.realpath( current.installDir );
 	const alias = execFileSync( "powershell.exe", [ "-NoProfile", "-NonInteractive",
 		"-Command", source ], {
 			env: { ...process.env, STGUI_SHORT_PATH: canonical },
@@ -424,7 +430,8 @@ test( "keeps updater paths short when the installation directory name is long", 
 	const job = await updater.prepareUpdate( { ...current, installDir } );
 	assert.match( path.basename( job.jobDir ), /^\.stgui-[a-f0-9]{16}$/ );
 	assert.equal( path.basename( job.stageDir ).length, 29 );
-	assert.ok( path.relative( current.root, job.helperPath ).length < 40 );
+	const parent = await fs.promises.realpath( current.root );
+	assert.ok( path.relative( parent, job.helperPath ).length < 40 );
 	assert.equal( job.token.length, 64 );
 	assert.equal( await updater.discardUpdate( job ), true );
 	assert.equal( fs.existsSync( path.join( installDir, "old-file.txt" ) ), true );

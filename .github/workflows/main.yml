@@ -47,6 +47,9 @@ jobs:
       - name: Install dependencies
         shell: bash
         run: yarn install --frozen-lockfile --no-progress --non-interactive
+      - name: Test application updater
+        shell: bash
+        run: node --test .github/tests/updater-*.cjs .github/tests/update-manifest.cjs
       - name: Test
         shell: bash
         run: |
@@ -58,9 +61,6 @@ jobs:
       - name: Test release publication
         if: startsWith(matrix.os, 'ubuntu')
         run: node --test .github/tests/publish-master-release.cjs
-      - name: Test application updater
-        shell: bash
-        run: node --test .github/tests/updater-*.cjs .github/tests/update-manifest.cjs
       - name: I18n
         if: startsWith(matrix.os, 'ubuntu')
         run: yarn run grunt webpack:i18n

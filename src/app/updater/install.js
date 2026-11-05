@@ -370,9 +370,13 @@ async function startInstall( job, { parentPid = process.pid, args = [] } = {} ) 
 			String( job.renameTimeoutMs || 30000 ), ...args ];
 	let child;
 	try {
-		child = spawn( executable, parameters, {
-			detached: true, windowsHide: true, stdio: "ignore", cwd: job.jobDir
-		});
+		const log = await fsp.open( path.join( job.jobDir, "helper.log" ), "a", 0o600 );
+		try {
+			child = spawn( executable, parameters, {
+				detached: true, windowsHide: true,
+				stdio: [ "ignore", log.fd, log.fd ], cwd: job.jobDir
+			});
+		} finally { await log.close(); }
 		let spawnError;
 		child.once( "error", error => { spawnError = error; } );
 		const timeout = Math.max( 100, Math.min( 30000, job.handshakeTimeoutMs || 10000 ) );

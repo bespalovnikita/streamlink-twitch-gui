@@ -2,11 +2,11 @@ const { test } = require( "node:test" );
 const assert = require( "node:assert/strict" );
 const { EventEmitter } = require( "node:events" );
 const { Readable } = require( "node:stream" );
-const { createHash } = require( "node:crypto" );
+const { createHash, generateKeyPairSync, sign } = require( "node:crypto" );
 const fs = require( "node:fs" );
 const os = require( "node:os" );
 const path = require( "node:path" );
-const { checkForUpdate, downloadUpdate } = require( "../../src/app/updater/client" );
+const { checkForUpdate, downloadUpdate: downloadClient } = require( "../../src/app/updater/client" );
 
 
 const repository = "example/streamlink-twitch-gui";
@@ -15,8 +15,33 @@ const api = `https://api.github.com/repos/${repository}/releases?per_page=100`;
 const windows = Buffer.from( "Verified Windows archive bytes" );
 const linux = Buffer.from( "Verified Linux archive bytes" );
 const digest = bytes => createHash( "sha256" ).update( bytes ).digest( "hex" );
+const signingKey = generateKeyPairSync( "ed25519" );
+const trustedKeys = {
+	"test-key": signingKey.publicKey.export( { type: "spki", format: "pem" } )
+};
 const assetUrl = ( tag, name ) => `https://github.com/${repository}/releases/download/`
 	+ `${encodeURIComponent( tag )}/${encodeURIComponent( name )}`;
+
+function downloadUpdate( update, filename, settings ) {
+	return downloadClient( update, filename, { trustedKeys, ...settings } );
+}
+
+function signFixture( item ) {
+	item.body = Buffer.from( JSON.stringify( item.manifest ) );
+	item.signature = {
+		schema: 1,
+		algorithm: "Ed25519",
+		keyId: "test-key",
+		signatureBase64: sign( null, item.body, signingKey.privateKey ).toString( "base64" )
+	};
+	item.signatureBody = Buffer.from( JSON.stringify( item.signature ) );
+	item.release.assets[0].size = item.body.length;
+	const signatureAsset = item.release.assets.find( asset => asset.name === "update.json.sig" );
+	if ( signatureAsset ) { signatureAsset.size = item.signatureBody.length; }
+	item.update.manifestBytes = item.body;
+	item.update.manifestSignature = item.signature;
+	return item;
+}
 
 
 function fixture( overrides = {} ) {
@@ -31,11 +56,11 @@ function fixture( overrides = {} ) {
 		platforms: {
 			win64: {
 				name: "streamlink-twitch-gui-v2.5.3-master.gold+3.gabc1234-win64.zip",
-				sha256: digest( windows ), size: windows.length
+				sha256: digest( windows ), size: windows.length, unpackedSize: 100
 			},
 			linux64: {
 				name: "streamlink-twitch-gui-v2.5.3-master.gold+3.gabc1234-linux64.tar.gz",
-				sha256: digest( linux ), size: linux.length
+				sha256: digest( linux ), size: linux.length, unpackedSize: 100
 			}
 		},
 		...overrides
@@ -55,7 +80,7 @@ function fixture( overrides = {} ) {
 	for ( const entry of Object.values( manifest.platforms || {} ) ) {
 		release.assets.push( descriptor( entry.name, entry.size ) );
 	}
-	return {
+	const item = {
 		manifest, release, tag, body,
 		update: {
 			manifest, tag, platform: "win64",
@@ -64,6 +89,9 @@ function fixture( overrides = {} ) {
 			}
 		}
 	};
+	signFixture( item );
+	release.assets.push( descriptor( "update.json.sig", item.signatureBody.length ) );
+	return item;
 }
 
 function transport( routes ) {
@@ -102,12 +130,14 @@ function discovery( fixtures, extraRoutes = {} ) {
 	const routes = { [ api ]: { body: JSON.stringify( fixtures.map( item => item.release ) ) } };
 	for ( const item of fixtures ) {
 		routes[ assetUrl( item.tag, "update.json" ) ] = { body: item.body };
+		routes[ assetUrl( item.tag, "update.json.sig" ) ] = { body: item.signatureBody };
 	}
 	return transport( { ...routes, ...extraRoutes } );
 }
 
 function options( request, extra = {} ) {
-	return { repository, currentBuild, platform: "win32", arch: "x64", request, ...extra };
+	return { repository, currentBuild, platform: "win32", arch: "x64", request,
+		trustedKeys, ...extra };
 }
 
 function destination( context ) {
@@ -134,6 +164,9 @@ test( "Discovers the fork master update for both platforms without /latest", asy
 	assert.deepEqual( update.asset, item.update.asset );
 	assert.equal( update.releaseUrl, `https://github.com/${repository}/releases/tag/${item.tag}` );
 	assert.ok( update.versionLabel.includes( item.manifest.commit.slice( 0, 8 ) ) );
+	assert.ok( Buffer.isBuffer( update.manifestBytes ) );
+	assert.equal( update.manifestSignature.algorithm, "Ed25519" );
+	assert.equal( JSON.stringify( update ).includes( "manifestBytes" ), false );
 	assert.equal( fake.calls[0].url, api );
 	const other = await checkForUpdate( options( fake.request, { platform: "linux" } ) );
 	assert.equal( other.platform, "linux64" );
@@ -183,7 +216,17 @@ test( "The same commit never updates itself, even after a rebuild", async () => 
 	const item = fixture( { ...currentBuild, buildNumber: 999 } );
 	const fake = discovery( [ item ] );
 	assert.equal( await checkForUpdate( options( fake.request ) ), null );
-	assert.equal( fake.calls.length, 1 );
+	assert.equal( fake.calls.length, 3, "Verifies signatures even for an already installed commit" );
+});
+
+test( "An already installed commit cannot bypass signature checks", async () => {
+	const item = fixture( currentBuild );
+	item.signature.signatureBase64 = Buffer.alloc( 64 ).toString( "base64" );
+	item.signatureBody = Buffer.from( JSON.stringify( item.signature ) );
+	const fake = discovery( [ item ] );
+	await assert.rejects( checkForUpdate( options( fake.request, { manual: true } ) ), {
+		code: "INVALID_SIGNATURE"
+	} );
 });
 
 test( "Ignores drafts, stable releases, and snapshots without update metadata", async () => {
@@ -196,6 +239,106 @@ test( "Ignores drafts, stable releases, and snapshots without update metadata", 
 	const fake = discovery( [ draft, stable, old ] );
 	assert.equal( await checkForUpdate( options( fake.request ) ), null );
 	assert.equal( fake.calls.length, 1 );
+});
+
+test( "Legacy unsigned releases are ignored, including a manual check", async () => {
+	const unsigned = fixture();
+	unsigned.release.assets = unsigned.release.assets.filter( asset =>
+		asset.name !== "update.json.sig" );
+	for ( const manual of [ false, true ] ) {
+		const fake = discovery( [ unsigned ] );
+		assert.equal( await checkForUpdate( options( fake.request, { manual } ) ), null );
+		assert.equal( fake.calls.length, 1 );
+	}
+});
+
+test( "Verifies the exact manifest bytes rather than parsed or normalized JSON", async () => {
+	const item = fixture();
+	const tampered = Buffer.concat( [ item.body, Buffer.from( "\n" ) ] );
+	item.release.assets[0].size = tampered.length;
+	const fake = discovery( [ item ], { [ assetUrl( item.tag, "update.json" ) ]: {
+		body: tampered
+	} } );
+	await assert.rejects( checkForUpdate( options( fake.request ) ), {
+		code: "INVALID_SIGNATURE"
+	} );
+});
+
+for ( const mutate of [
+	signature => { signature.schema = 2; },
+	signature => { signature.algorithm = "RSA"; },
+	signature => { signature.signatureBase64 = "a".repeat( 88 ); },
+	signature => { signature.signatureBase64 += "\n"; }
+] ) {
+	test( "Rejects a malformed or invalid detached signature", async () => {
+		const item = fixture();
+		mutate( item.signature );
+		item.signatureBody = Buffer.from( JSON.stringify( item.signature ) );
+		item.release.assets.find( asset => asset.name === "update.json.sig" ).size
+			= item.signatureBody.length;
+		const fake = discovery( [ item ] );
+		await assert.rejects( checkForUpdate( options( fake.request ) ), {
+			code: "INVALID_SIGNATURE"
+		} );
+	});
+}
+
+test( "Rejects unknown signing keys and untrusted replacement public keys", async () => {
+	const item = fixture();
+	const replacement = generateKeyPairSync( "ed25519" );
+	const fake = discovery( [ item ] );
+	await assert.rejects( checkForUpdate( options( fake.request, { trustedKeys: {} } ) ), {
+		code: "UNTRUSTED_SIGNING_KEY"
+	} );
+	await assert.rejects( checkForUpdate( options( fake.request, { trustedKeys: {
+		"test-key": replacement.publicKey.export( { type: "spki", format: "pem" } )
+	} } ) ), { code: "INVALID_SIGNATURE" } );
+});
+
+test( "Rejects oversized manifest and signature descriptors before downloading them", async () => {
+	for ( const [ name, size ] of [ [ "update.json", 65537 ], [ "update.json.sig", 4097 ] ] ) {
+		const item = fixture();
+		item.release.assets.find( asset => asset.name === name ).size = size;
+		const fake = discovery( [ item ] );
+		await assert.rejects( checkForUpdate( options( fake.request ) ), { code: "INVALID_RELEASE" } );
+		assert.equal( fake.calls.some( call => call.url === assetUrl( item.tag, name ) ), false );
+	}
+});
+
+test( "Allows a second explicitly pinned Ed25519 key for rotation", async () => {
+	const item = fixture();
+	const rotation = generateKeyPairSync( "ed25519" );
+	item.signature.keyId = "next-key";
+	item.signature.signatureBase64 = sign( null, item.body, rotation.privateKey ).toString( "base64" );
+	item.signatureBody = Buffer.from( JSON.stringify( item.signature ) );
+	item.release.assets.find( asset => asset.name === "update.json.sig" ).size
+		= item.signatureBody.length;
+	const fake = discovery( [ item ] );
+	const update = await checkForUpdate( options( fake.request, { trustedKeys: {
+		...trustedKeys, "next-key": rotation.publicKey.export( { type: "spki", format: "pem" } )
+	} } ) );
+	assert.equal( update.tag, item.tag );
+});
+
+test( "Bad signed candidates fall back to a separately verified compatible update", async () => {
+	const bad = fixture( { commitTime: 300 } );
+	const older = fixture( { commit: "c".repeat( 40 ) } );
+	bad.signature.signatureBase64 = Buffer.alloc( 64 ).toString( "base64" );
+	bad.signatureBody = Buffer.from( JSON.stringify( bad.signature ) );
+	const fake = discovery( [ bad, older ] );
+	assert.equal( ( await checkForUpdate( options( fake.request ) ) ).tag, older.tag );
+});
+
+test( "Release notes are bounded plain text without markup, link targets or controls", async () => {
+	const item = fixture();
+	item.release.body = "# Changes\r\n**Fixed** <b>streams</b> [Details](javascript:bad)"
+		+ "\u202e\u0000\n![Image](https://example.test/image)\n";
+	const fake = discovery( [ item ] );
+	const update = await checkForUpdate( options( fake.request ) );
+	assert.equal( update.releaseNotes, "Changes\nFixed streams Details\nImage" );
+	item.release.body = "x".repeat( 20000 );
+	const long = discovery( [ item ] );
+	assert.equal( ( await checkForUpdate( options( long.request ) ) ).releaseNotes.length, 4000 );
 });
 
 for ( const extra of [ { platform: "darwin" }, { platform: "constructor" }, { arch: "arm64" } ] ) {
@@ -222,6 +365,10 @@ for ( const invalid of [
 		// Preserve a valid discoverable tag, so manifest validation receives the invalid commit.
 		if ( invalid.commit ) {
 			item.release.tag_name = `v2.5.3-master.g${"b".repeat( 40 )}`;
+			item.tag = item.release.tag_name;
+			for ( const asset of item.release.assets ) {
+				asset.browser_download_url = assetUrl( item.tag, asset.name );
+			}
 		}
 		item.release.assets[0].browser_download_url
 			= assetUrl( item.release.tag_name, "update.json" );
@@ -237,7 +384,7 @@ for ( const invalid of [
 test( "Rejects a manifest whose tag identifies another commit", async () => {
 	const item = fixture();
 	item.manifest.commit = "c".repeat( 40 );
-	item.body = Buffer.from( JSON.stringify( item.manifest ) );
+	signFixture( item );
 	const fake = discovery( [ item ] );
 	await assert.rejects( checkForUpdate( options( fake.request ) ), { code: "INVALID_MANIFEST" } );
 });
@@ -247,12 +394,13 @@ test( "Rejects unsafe asset names, missing platforms and mismatched release size
 		item => { item.manifest.platforms.win64.name = "../archive-win64.zip"; },
 		item => { delete item.manifest.platforms.linux64; },
 		item => { item.release.assets[1].size++; },
-		item => { item.release.assets[2].size++; }
+		item => { item.release.assets[2].size++; },
+		item => { item.manifest.platforms.win64.unpackedSize = 0; },
+		item => { item.manifest.platforms.win64.unpackedSize = 4 * 1024 ** 3 + 1; }
 	] ) {
 		const item = fixture();
 		mutate( item );
-		item.body = Buffer.from( JSON.stringify( item.manifest ) );
-		item.release.assets[0].size = item.body.length;
+		signFixture( item );
 		const fake = discovery( [ item ] );
 		const codes = [ "INVALID_MANIFEST", "MISSING_PLATFORM_ASSET", "INVALID_RELEASE" ];
 		await assert.rejects( checkForUpdate( options( fake.request ) ), cause =>
@@ -331,6 +479,25 @@ test( "Downloads, verifies and atomically caches an archive with progress", asyn
 	assert.equal( await downloadUpdate( update, filename, {
 		request: () => assert.fail( "A verified cached download must not contact GitHub" )
 	} ), filename );
+});
+
+test( "Download rejects unsigned or mutated descriptors before touching disk or network", async context => {
+	for ( const mutate of [
+		update => { delete update.manifestSignature; },
+		update => { update.manifestBytes[0] ^= 1; },
+		update => { update.manifest.version = "9.0.0"; },
+		update => { update.asset.sha256 = "f".repeat( 64 ); },
+		update => { update.asset.unpackedSize++; }
+	] ) {
+		const { update } = fixture();
+		mutate( update );
+		const filename = destination( context );
+		await assert.rejects( downloadUpdate( update, filename, {
+			request: () => assert.fail( "Invalid signed data must not trigger a download" )
+		} ), cause => [ "SIGNATURE_REQUIRED", "INVALID_SIGNATURE", "INVALID_MANIFEST" ]
+			.includes( cause.code ) );
+		assert.equal( fs.existsSync( path.dirname( filename ) ), false );
+	}
 });
 
 test( "Replaces an existing corrupt cache only after verifying the replacement", async context => {

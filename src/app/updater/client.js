@@ -1,18 +1,24 @@
 const https = require( "node:https" );
 const fs = require( "node:fs" );
 const path = require( "node:path" );
-const { createHash, randomUUID } = require( "node:crypto" );
+const { createHash, createPublicKey, randomUUID, verify } = require( "node:crypto" );
 const { Transform } = require( "node:stream" );
 const { pipeline } = require( "node:stream/promises" );
+const updateConfig = require( "../../config/update.json" );
 
 
 const MAX_JSON = 4 * 1024 * 1024;
+const MAX_MANIFEST = 64 * 1024;
+const MAX_SIGNATURE = 4 * 1024;
 const MAX_ARCHIVE = 2 * 1024 * 1024 * 1024;
+const MAX_UNPACKED = 4 * 1024 * 1024 * 1024;
 const MAX_CANDIDATES = 20;
 const COMMIT = /^[a-f0-9]{40}$/;
 const HASH = /^[a-f0-9]{64}$/;
 const FILE_NAME = /^[a-zA-Z0-9][a-zA-Z0-9._+-]{0,199}$/;
 const VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[a-z0-9.-]+)?(?:\+[a-z0-9.-]+)?$/i;
+// eslint-disable-next-line no-control-regex
+const NOTE_CONTROLS = /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f\u202a-\u202e\u2066-\u2069]/g;
 const CDN_HOSTS = new Set([
 	"release-assets.githubusercontent.com",
 	"objects.githubusercontent.com",
@@ -149,18 +155,19 @@ function contentLength( response ) {
 	return length;
 }
 
-async function readJson( url, options ) {
+async function readBytes( url, options ) {
 	const response = await openResponse( url, options );
 	try {
+		const maximum = options.maxBytes || MAX_JSON;
 		const length = contentLength( response );
-		if ( length > MAX_JSON ) {
+		if ( length > maximum ) {
 			throw error( "RESPONSE_TOO_LARGE", "Update metadata exceeds the size limit" );
 		}
 		const chunks = [];
 		let received = 0;
 		for await ( const chunk of response ) {
 			received += chunk.length;
-			if ( received > MAX_JSON ) {
+			if ( received > maximum ) {
 				throw error( "RESPONSE_TOO_LARGE", "Update metadata exceeds the size limit" );
 			}
 			chunks.push( chunk );
@@ -171,14 +178,82 @@ async function readJson( url, options ) {
 		if ( options.expectedSize !== undefined && received !== options.expectedSize ) {
 			throw error( "INVALID_RELEASE", "Manifest size does not match its release asset" );
 		}
-		try { return JSON.parse( Buffer.concat( chunks ).toString( "utf8" ) ); } catch ( cause ) {
-			throw error( "INVALID_JSON", "GitHub returned invalid update metadata", cause );
-		}
+		return Buffer.concat( chunks );
 	} catch ( cause ) {
 		if ( options.signal && options.signal.aborted ) { throw aborted(); }
 		if ( cause.name === "UpdateError" ) { throw cause; }
 		throw error( "NETWORK_ERROR", "Could not read update metadata", cause );
 	} finally { response.destroy(); }
+}
+
+function parseJson( bytes ) {
+	try { return JSON.parse( bytes.toString( "utf8" ) ); } catch ( cause ) {
+		throw error( "INVALID_JSON", "GitHub returned invalid update metadata", cause );
+	}
+}
+
+async function readJson( url, options ) {
+	return parseJson( await readBytes( url, options ) );
+}
+
+function verifyManifest( bytes, signature, trustedKeys = updateConfig.trustedKeys ) {
+	if ( !Buffer.isBuffer( bytes ) || !bytes.length || bytes.length > MAX_MANIFEST
+		|| !signature ) {
+		throw error( "SIGNATURE_REQUIRED", "A signed update manifest is required" );
+	}
+	if ( signature.schema !== 1 || signature.algorithm !== "Ed25519"
+		|| typeof signature.keyId !== "string"
+		|| !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/.test( signature.keyId )
+		|| typeof signature.signatureBase64 !== "string"
+		|| signature.signatureBase64.length !== 88 ) {
+		throw error( "INVALID_SIGNATURE", "Invalid update signature envelope" );
+	}
+	if ( !trustedKeys || !Object.prototype.hasOwnProperty.call( trustedKeys, signature.keyId ) ) {
+		throw error( "UNTRUSTED_SIGNING_KEY", "Unknown update signing key" );
+	}
+	const decoded = Buffer.from( signature.signatureBase64, "base64" );
+	if ( decoded.length !== 64 || decoded.toString( "base64" ) !== signature.signatureBase64 ) {
+		throw error( "INVALID_SIGNATURE", "Invalid update signature encoding" );
+	}
+	try {
+		const key = createPublicKey( trustedKeys[ signature.keyId ] );
+		if ( key.asymmetricKeyType !== "ed25519" || !verify( null, bytes, key, decoded ) ) {
+			throw new Error( "Signature verification failed" );
+		}
+	} catch ( cause ) {
+		throw error( "INVALID_SIGNATURE", "Update manifest signature verification failed", cause );
+	}
+	return parseJson( bytes );
+}
+
+function releaseNotes( body ) {
+	if ( typeof body !== "string" ) { return ""; }
+	return body.slice( 0, 16000 ).replace( /\r\n?/g, "\n" )
+		.replace( NOTE_CONTROLS, "" )
+		.replace( /<[^>]*>/g, "" )
+		.replace( /!?\[([^\]\n]*)\]\([^\)\n]*\)/g, "$1" )
+		.replace( /^#{1,6}\s+/gm, "" )
+		.replace( /^```[^\n]*$/gm, "" )
+		.replace( /\*\*|__/g, "" ).trim().slice( 0, 4000 );
+}
+
+async function signedReleaseManifest( release, repository, options ) {
+	const metadata = releaseAsset( release, "update.json", repository );
+	const detached = releaseAsset( release, "update.json.sig", repository );
+	const readAsset = async ( asset, maximum ) => {
+		if ( !validInteger( asset.size ) || asset.size > maximum ) {
+			throw error( "INVALID_RELEASE", "Invalid update metadata asset size" );
+		}
+		return readBytes( asset.browser_download_url, {
+			...options, expectedSize: asset.size, maxBytes: maximum, policy: {
+				kind: "asset", pathname: assetPath( repository, release.tag_name, asset.name )
+			}
+		});
+	};
+	const manifestBytes = await readAsset( metadata, MAX_MANIFEST );
+	const manifestSignature = parseJson( await readAsset( detached, MAX_SIGNATURE ) );
+	const manifest = verifyManifest( manifestBytes, manifestSignature, options.trustedKeys );
+	return { manifest, manifestBytes, manifestSignature };
 }
 
 function validateManifest( manifest, tag, repository, platform ) {
@@ -201,7 +276,8 @@ function validateManifest( manifest, tag, repository, platform ) {
 			|| !entry.name.startsWith( "streamlink-twitch-gui-" )
 			|| !entry.name.endsWith( suffix ) || typeof entry.sha256 !== "string"
 			|| !HASH.test( entry.sha256 )
-			|| !validInteger( entry.size ) || entry.size > MAX_ARCHIVE ) {
+			|| !validInteger( entry.size ) || entry.size > MAX_ARCHIVE
+			|| !validInteger( entry.unpackedSize ) || entry.unpackedSize > MAX_UNPACKED ) {
 			throw error( "INVALID_MANIFEST", `Invalid ${key} update asset` );
 		}
 	}
@@ -251,7 +327,8 @@ async function checkForUpdate( options ) {
 		&& typeof release.tag_name === "string" && /^v.+-master\.g[a-f0-9]{40}$/.test(
 			release.tag_name ) && Number.isFinite( Date.parse( release.published_at ) )
 		&& Array.isArray( release.assets )
-		&& release.assets.some( asset => asset && asset.name === "update.json" ) )
+		&& release.assets.some( asset => asset && asset.name === "update.json" )
+		&& release.assets.some( asset => asset && asset.name === "update.json.sig" ) )
 		.sort( ( a, b ) => Date.parse( b.published_at ) - Date.parse( a.published_at ) )
 		.slice( 0, MAX_CANDIDATES );
 	let latest = null;
@@ -259,21 +336,9 @@ async function checkForUpdate( options ) {
 	const failures = [];
 	for ( const release of candidates ) {
 		assertNotAborted( signal );
-		if ( release.tag_name.endsWith( `.g${currentBuild.commit}` ) ) {
-			validCandidate = true;
-			continue;
-		}
 		try {
-			const metadata = releaseAsset( release, "update.json", repository );
-			if ( !validInteger( metadata.size ) || metadata.size > MAX_JSON ) {
-				throw error( "INVALID_RELEASE", "Invalid update manifest asset size" );
-			}
-			const manifest = await readJson( metadata.browser_download_url, {
-				...options, expectedSize: metadata.size, policy: {
-					kind: "asset",
-					pathname: assetPath( repository, release.tag_name, "update.json" )
-				}
-			});
+			const signed = await signedReleaseManifest( release, repository, options );
+			const { manifest } = signed;
 			const entry = validateManifest( manifest, release.tag_name, repository, platformKey );
 			for ( const key of [ "win64", "linux64" ] ) {
 				const descriptor = manifest.platforms[ key ];
@@ -294,8 +359,13 @@ async function checkForUpdate( options ) {
 				releaseUrl: `https://github.com/${repository}/releases/tag/${release.tag_name}`,
 				versionLabel: `${manifest.version} master (${manifest.commit.slice( 0, 8 )})`,
 				asset: { ...entry, url: asset.browser_download_url },
+				releaseNotes: releaseNotes( release.body ),
 				platform: platformKey
 			};
+			Object.defineProperties( latest, {
+				manifestBytes: { value: signed.manifestBytes },
+				manifestSignature: { value: signed.manifestSignature }
+			});
 		} catch ( cause ) {
 			assertNotAborted( signal );
 			if ( cause.code === "ABORTED" ) { throw cause; }
@@ -331,9 +401,15 @@ async function downloadUpdate( update, destination, options = {} ) {
 	if ( ![ "win64", "linux64" ].includes( platform ) || !asset ) {
 		throw error( "UNSUPPORTED_PLATFORM", "Missing update platform asset" );
 	}
+	const verified = verifyManifest( update.manifestBytes, update.manifestSignature,
+		options.trustedKeys );
+	if ( JSON.stringify( verified ) !== JSON.stringify( manifest ) ) {
+		throw error( "INVALID_MANIFEST", "Download manifest differs from the signed bytes" );
+	}
 	const entry = validateManifest( manifest, tag, manifest.repository, platform );
 	if ( !validRepository( manifest.repository ) || asset.name !== entry.name
-		|| asset.sha256 !== entry.sha256 || asset.size !== entry.size ) {
+		|| asset.sha256 !== entry.sha256 || asset.size !== entry.size
+		|| asset.unpackedSize !== entry.unpackedSize ) {
 		throw error( "INVALID_MANIFEST", "Download asset does not match the update manifest" );
 	}
 	const policy = { kind: "asset", pathname: assetPath( manifest.repository, tag, asset.name ) };

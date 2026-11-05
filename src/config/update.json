@@ -1,6 +1,10 @@
 {
 	"repository": "bespalovnikita/streamlink-twitch-gui",
 	"manifest": "update.json",
+	"signingKeyId": "master-2026-11-05",
+	"trustedKeys": {
+		"master-2026-11-05": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEARGTZrcJjvvEmd0ozjwlcVjCAx1f6lsYDuScuUNagQEs=\n-----END PUBLIC KEY-----\n"
+	},
 	"check-again": 604800000,
 	"show-debug-message": 86400000,
 	"githubreleases": {

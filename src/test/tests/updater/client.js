@@ -2,11 +2,21 @@ import { module, test } from "qunit";
 import { EventEmitter } from "events";
 import { Readable } from "stream";
 import { Buffer } from "buffer";
-import { createHash } from "crypto";
+import { createHash, generateKeyPairSync, sign } from "crypto";
 import { promises as fs } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { downloadUpdate } from "updater/client";
+import { downloadUpdate as downloadClient } from "updater/client";
+
+
+const signingKey = generateKeyPairSync( "ed25519" );
+const trustedKeys = {
+	"qunit-key": signingKey.publicKey.export({ type: "spki", format: "pem" })
+};
+
+function downloadUpdate( update, destination, options ) {
+	return downloadClient( update, destination, { trustedKeys, ...options } );
+}
 
 
 function descriptor( bytes ) {
@@ -15,9 +25,10 @@ function descriptor( bytes ) {
 	const asset = {
 		name: "streamlink-twitch-gui-test-win64.zip",
 		size: bytes.length,
+		unpackedSize: 100,
 		sha256: createHash( "sha256" ).update( bytes ).digest( "hex" )
 	};
-	return {
+	const update = {
 		tag,
 		platform: "win64",
 		manifest: {
@@ -38,6 +49,15 @@ function descriptor( bytes ) {
 			url: `https://github.com/example/streamlink-twitch-gui/releases/download/${tag}/${asset.name}`
 		}
 	};
+	update.manifestBytes = Buffer.from( JSON.stringify( update.manifest ) );
+	update.manifestSignature = {
+		schema: 1,
+		algorithm: "Ed25519",
+		keyId: "qunit-key",
+		signatureBase64: sign( null, update.manifestBytes, signingKey.privateKey )
+			.toString( "base64" )
+	};
+	return update;
 }
 
 function fakeRequest( bytes ) {

@@ -176,9 +176,12 @@ module( "ui/routes/user/followed-streams/route", function( hooks ) {
 	});
 
 	test( "Clears the timer when destroyed", async function( assert ) {
-		await visit( "/user/followed-streams" );
+		// Keep the route outside the router's active hierarchy during destruction.
+		this.route._startAutoRefresh();
 		const refresh = sinon.stub( this.route, "refresh" ).resolves();
+		assert.strictEqual( this.clock.countTimers(), 1, "Starts the refresh timer" );
 		run( () => this.route.destroy() );
+		assert.strictEqual( this.clock.countTimers(), 0, "Clears the timer on destruction" );
 		this.clock.tick( 30000 );
 		await settled();
 		assert.notOk( refresh.called, "Does not refresh after destruction" );

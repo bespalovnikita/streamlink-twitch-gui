@@ -324,6 +324,8 @@ function Install-Application {
 		}
 		Start-Sleep -Milliseconds 100
 	}
+	# NW.js browser/profile teardown can outlive its renderer's Node PID briefly.
+	Start-Sleep -Milliseconds 500
 	$oldMoved = $false
 	$newMoved = $false
 	$child = $null

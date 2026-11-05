@@ -39,15 +39,28 @@ async function canonical( input ) {
 	}
 }
 
+async function rejectLinkedAncestors( input ) {
+	let current = path.resolve( input );
+	while ( current ) {
+		if ( ( await fsp.lstat( current ) ).isSymbolicLink() ) {
+			throw failure( "UPDATE_LOCATION" );
+		}
+		const parent = path.dirname( current );
+		if ( parent === current ) { return; }
+		current = parent;
+	}
+}
+
 async function checkLocation( installDir, profileDir, platform ) {
 	if ( typeof installDir !== "string" || typeof profileDir !== "string" ) {
 		throw failure( "UPDATE_LOCATION" );
 	}
+	if ( platform === "win32" ) { await rejectLinkedAncestors( installDir ); }
 	const install = await canonical( installDir );
 	const profile = await canonical( profileDir );
 	const resolved = path.resolve( installDir );
-	const matches = platform === "win32"
-		? install.toLowerCase() === resolved.toLowerCase() : install === resolved;
+	// Windows realpath also expands harmless 8.3 aliases; reparse points were checked above.
+	const matches = platform === "win32" || install === resolved;
 	if ( !matches || path.dirname( install ) === install ) {
 		throw failure( "UPDATE_LOCATION" );
 	}

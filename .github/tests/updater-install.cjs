@@ -1,6 +1,6 @@
 const { test } = require( "node:test" );
 const assert = require( "node:assert/strict" );
-const { spawn } = require( "node:child_process" );
+const { spawn, execFileSync } = require( "node:child_process" );
 const { createHash } = require( "node:crypto" );
 const { once } = require( "node:events" );
 const fs = require( "node:fs" );
@@ -340,6 +340,41 @@ test( "accepts Windows path case differences while rejecting directory junctions
 	await assert.rejects( updater.prepareUpdate( { ...current, installDir: junction } ), {
 		code: "UPDATE_LOCATION"
 	} );
+	assertPreserved( current );
+} );
+
+test( "accepts real Windows short path aliases without weakening junction checks", {
+	skip: !isWindows
+}, async context => {
+	const current = await fixture( context );
+	const source = `
+Add-Type -TypeDefinition @'
+using System.Runtime.InteropServices;
+using System.Text;
+public static class ShortPathFixture {
+ [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+ public static extern uint GetShortPathName(string path, StringBuilder output, uint length);
+}
+'@
+$output = New-Object Text.StringBuilder 32768
+$length = [ShortPathFixture]::GetShortPathName($env:STGUI_SHORT_PATH, $output, 32768)
+if ($length -eq 0) { exit 1 }
+[Console]::OutputEncoding = New-Object Text.UTF8Encoding($false)
+[Console]::Write($output.ToString())
+`;
+	const canonical = fs.realpathSync( current.installDir );
+	const alias = execFileSync( "powershell.exe", [ "-NoProfile", "-NonInteractive",
+		"-Command", source ], {
+			env: { ...process.env, STGUI_SHORT_PATH: canonical },
+			encoding: "utf8", windowsHide: true
+		} );
+	if ( path.resolve( alias ).toLowerCase() === canonical.toLowerCase() ) {
+		context.skip( "The fixture volume does not provide 8.3 path aliases" );
+		return;
+	}
+	const job = await updater.prepareUpdate( { ...current, installDir: alias } );
+	assert.equal( job.installDir, canonical );
+	assert.equal( await updater.discardUpdate( job ), true );
 	assertPreserved( current );
 } );
 

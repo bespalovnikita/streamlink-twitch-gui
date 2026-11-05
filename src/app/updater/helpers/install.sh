@@ -90,6 +90,8 @@ for ((attempt = 0; attempt < 1200; attempt++)); do
 done
 if kill -0 "$parent_pid" 2>/dev/null; then exit 1; fi
 parent_exited=1
+# NW.js browser/profile teardown can outlive its renderer's Node PID briefly.
+sleep 0.5
 
 for ((attempt = 0; attempt < (rename_timeout_ms + 99) / 100; attempt++)); do
   if mv -T -- "$install_dir" "$backup_dir" 2>/dev/null; then old_moved=1; break; fi

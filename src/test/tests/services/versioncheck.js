@@ -144,6 +144,8 @@ module( "services/versioncheck", function( hooks ) {
 			promiseModal: this.promiseModal
 		}) );
 		this.owner.register( "service:streaming", Service.extend({ hasStreams: false }) );
+		this.owner.register( "service:settings", Service.extend({ content: {} }) );
+		this.owner.register( "service:router", Service.extend({ currentRouteName: "index" }) );
 		this.owner.register( "controller:settings", Controller.extend({
 			model: this.settingsModel
 		}) );

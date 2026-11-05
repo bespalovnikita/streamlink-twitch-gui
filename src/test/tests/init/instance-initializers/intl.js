@@ -62,7 +62,8 @@ module( "init/instance-initializers/intl", function( hooks ) {
 				"routes",
 				"services",
 				"settings",
-				"themes"
+				"themes",
+				"updater"
 			],
 			"All required namespaces exist in the en locale"
 		);

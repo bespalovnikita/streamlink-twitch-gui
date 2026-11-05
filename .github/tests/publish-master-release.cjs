@@ -8,12 +8,14 @@ const path = require( "node:path" );
 
 
 const script = path.resolve( __dirname, "../scripts/publish-master-release.sh" );
+const prepareScript = path.resolve( __dirname, "../scripts/prepare-windows-release.sh" );
 const sha = "0123456789abcdef0123456789abcdef01234567";
 const otherSha = "fedcba9876543210fedcba9876543210fedcba98";
 const repo = "example/streamlink-twitch-gui";
 const tag = `v2.5.3-master.g${sha}`;
 const releaseUrl = `https://github.com/${repo}/releases/tag/${tag}`;
 const archiveName = "streamlink-twitch-gui-v2.5.3-linux64.tar.gz";
+const windowsName = "streamlink-twitch-gui-v2.5.3-win64.zip";
 const checksumName = "streamlink-twitch-gui-v2.5.3-checksums.txt";
 
 const fakeGh = `#!/usr/bin/env node
@@ -71,7 +73,7 @@ if ( args[ 0 ] === "api" && option( "--jq" ) === ".sha" ) {
 `;
 
 
-function fixture( context, initialState = {} ) {
+function fixture( context, initialState = {}, options = {} ) {
 	const directory = fs.mkdtempSync( path.join( os.tmpdir(), "publish-master-release-" ) );
 	context.after( () => fs.rmSync( directory, { recursive: true, force: true } ) );
 	const bin = path.join( directory, "bin" );
@@ -84,7 +86,14 @@ function fixture( context, initialState = {} ) {
 	const archive = Buffer.from( "Fake Linux archive for release publishing tests\n" );
 	const digest = createHash( "sha256" ).update( archive ).digest( "hex" );
 	fs.writeFileSync( path.join( dist, archiveName ), archive );
-	fs.writeFileSync( path.join( dist, checksumName ), `${digest}  ${archiveName}\n` );
+	let checksums = `${digest}  ${archiveName}\n`;
+	if ( options.includeWindows !== false ) {
+		const windows = Buffer.from( "Fake Windows archive for release publishing tests\n" );
+		const windowsDigest = createHash( "sha256" ).update( windows ).digest( "hex" );
+		fs.writeFileSync( path.join( dist, windowsName ), windows );
+		checksums += `${windowsDigest}  ${windowsName}\n`;
+	}
+	fs.writeFileSync( path.join( dist, checksumName ), checksums );
 	fs.writeFileSync( path.join( dist, "unrelated.txt" ), "Do not upload this file\n" );
 	const stateFile = path.join( directory, "state.json" );
 	const callsFile = path.join( directory, "calls.jsonl" );
@@ -99,6 +108,7 @@ function fixture( context, initialState = {} ) {
 	fs.writeFileSync( callsFile, "" );
 
 	return {
+		directory,
 		dist,
 		summaryFile,
 		state: () => JSON.parse( fs.readFileSync( stateFile, "utf8" ) ),
@@ -108,7 +118,7 @@ function fixture( context, initialState = {} ) {
 		clearCalls: () => fs.writeFileSync( callsFile, "" ),
 		calls: () => fs.readFileSync( callsFile, "utf8" ).trim().split( "\n" )
 			.filter( Boolean ).map( line => JSON.parse( line ) ),
-		run: () => spawnSync( "bash", [ script ], {
+		run: ( executable = script, extraEnv = {} ) => spawnSync( "bash", [ executable ], {
 			cwd: directory,
 			encoding: "utf8",
 			timeout: 10000,
@@ -121,7 +131,8 @@ function fixture( context, initialState = {} ) {
 				GITHUB_STEP_SUMMARY: summaryFile,
 				FAKE_GH_STATE: stateFile,
 				FAKE_GH_CALLS: callsFile,
-				FAKE_RELEASE_URL: releaseUrl
+				FAKE_RELEASE_URL: releaseUrl,
+				...extraEnv
 			}
 		})
 	};
@@ -157,8 +168,8 @@ function expectPublication( files, expectedActions ) {
 	const upload = changes.find( ({ args }) => args[ 1 ] === "upload" );
 	assert.ok( upload.args.includes( "--clobber" ), "Retries draft assets safely" );
 	assert.deepEqual( upload.args.slice( 3 ).filter( arg => arg !== "--clobber" ).sort(), [
-		`dist/${archiveName}`, `dist/${checksumName}`
-	].sort(), "Uploads only the archive and checksums" );
+		`dist/${archiveName}`, `dist/${windowsName}`, `dist/${checksumName}`
+	].sort(), "Uploads the Linux archive, Windows archive and shared checksums" );
 	const verify = calls.findIndex( ({ args }) => args[ 0 ] === "api" );
 	assert.ok( verify >= 0 && verify < calls.indexOf( upload ), "Verifies the tag before upload" );
 	assert.deepEqual( calls[ verify ].args, [
@@ -228,7 +239,7 @@ for ( const isDraft of [ true, false ] ) {
 	});
 }
 
-for ( const missing of [ archiveName, checksumName ] ) {
+for ( const missing of [ archiveName, windowsName, checksumName ] ) {
 	test( `Does not create or publish a release when ${missing} is missing`, context => {
 		const files = fixture( context );
 		fs.rmSync( path.join( files.dist, missing ) );
@@ -237,7 +248,7 @@ for ( const missing of [ archiveName, checksumName ] ) {
 	});
 }
 
-for ( const duplicate of [ "extra.tar.gz", "extra-checksums.txt" ] ) {
+for ( const duplicate of [ "extra-linux64.tar.gz", "extra-win64.zip", "extra-checksums.txt" ] ) {
 	test( `Rejects ambiguous release assets when ${duplicate} also exists`, context => {
 		const files = fixture( context );
 		fs.writeFileSync( path.join( files.dist, duplicate ), "Unexpected release asset\n" );
@@ -246,9 +257,86 @@ for ( const duplicate of [ "extra.tar.gz", "extra-checksums.txt" ] ) {
 	});
 }
 
-test( "Rejects an archive that does not match its checksum", context => {
+for ( const corrupted of [ archiveName, windowsName ] ) {
+	test( `Rejects ${corrupted} when its checksum does not match`, context => {
+		const files = fixture( context );
+		fs.appendFileSync( path.join( files.dist, corrupted ), "Corrupted archive\n" );
+		expectFailure( files.run() );
+		assert.deepEqual( files.calls(), [], "Does not publish corrupted assets" );
+	});
+}
+
+test( "Rejects a checksum manifest without the Windows archive hash", context => {
 	const files = fixture( context );
-	fs.appendFileSync( path.join( files.dist, archiveName ), "Corrupted archive\n" );
+	const manifest = path.join( files.dist, checksumName );
+	const linuxChecksum = fs.readFileSync( manifest, "utf8" ).split( "\n" )
+		.find( line => line.endsWith( archiveName ) );
+	fs.writeFileSync( manifest, `${linuxChecksum}\n` );
 	expectFailure( files.run() );
-	assert.deepEqual( files.calls(), [], "Does not publish corrupted assets" );
+	assert.deepEqual( files.calls(), [], "Requires checksum coverage for both platforms" );
+});
+
+function windowsFixture( context, withExecutable = true ) {
+	const files = fixture( context, {}, { includeWindows: false } );
+	const application = path.join( files.directory, "work/windows-app" );
+	fs.mkdirSync( application, { recursive: true } );
+	if ( withExecutable ) {
+		const executable = path.join( application, "streamlink-twitch-gui.exe" );
+		fs.writeFileSync( executable, "MZ test executable\n" );
+	}
+	fs.writeFileSync( path.join( application, ".portable-config" ), "Hidden runtime data\n" );
+	return files;
+}
+
+function runArchiveTool( files, executable, args ) {
+	const result = spawnSync( executable, args, {
+		cwd: files.dist,
+		encoding: "utf8",
+		timeout: 10000,
+		env: { PATH: "/usr/bin:/bin" }
+	});
+	assert.ifError( result.error );
+	assert.equal( result.status, 0, result.stdout + result.stderr );
+	return result.stdout;
+}
+
+test( "Packages the Windows app with hidden files and checksums for both platforms", context => {
+	const files = windowsFixture( context );
+	const result = files.run( prepareScript, { SOURCE_DATE_EPOCH: "1704067200" } );
+	assert.ifError( result.error );
+	assert.equal( result.status, 0, result.stdout + result.stderr );
+	const entries = runArchiveTool( files, "unzip", [ "-Z1", windowsName ] )
+		.trim().split( "\n" );
+	assert.deepEqual( entries.sort(), [
+		"streamlink-twitch-gui/",
+		"streamlink-twitch-gui/.portable-config",
+		"streamlink-twitch-gui/streamlink-twitch-gui.exe"
+	].sort(), "Uses the application directory prefix and preserves hidden files" );
+	assert.equal( runArchiveTool( files, "unzip", [
+		"-p", windowsName, "streamlink-twitch-gui/streamlink-twitch-gui.exe"
+	] ), "MZ test executable\n" );
+	assert.equal( runArchiveTool( files, "unzip", [
+		"-p", windowsName, "streamlink-twitch-gui/.portable-config"
+	] ), "Hidden runtime data\n" );
+	const checksums = fs.readFileSync( path.join( files.dist, checksumName ), "utf8" )
+		.trim().split( "\n" );
+	const expected = [ archiveName, windowsName ].map( name => {
+		const content = fs.readFileSync( path.join( files.dist, name ) );
+		const digest = createHash( "sha256" ).update( content ).digest( "hex" );
+		return `${digest}  ${name}`;
+	});
+	assert.deepEqual( checksums.sort(), expected.sort(), "Lists both archive SHA256 hashes" );
+	const verified = runArchiveTool( files, "sha256sum", [ "--check", checksumName ] );
+	assert.ok( verified.includes( `${archiveName}: OK` ) );
+	assert.ok( verified.includes( `${windowsName}: OK` ) );
+	assert.deepEqual( files.calls(), [], "Packaging does not contact GitHub" );
+});
+
+test( "Does not create a Windows ZIP when the application executable is missing", context => {
+	const files = windowsFixture( context, false );
+	const checksums = fs.readFileSync( path.join( files.dist, checksumName ), "utf8" );
+	expectFailure( files.run( prepareScript, { SOURCE_DATE_EPOCH: "1704067200" } ) );
+	assert.equal( fs.existsSync( path.join( files.dist, windowsName ) ), false );
+	assert.equal( fs.readFileSync( path.join( files.dist, checksumName ), "utf8" ), checksums );
+	assert.deepEqual( files.calls(), [], "Does not publish a missing application" );
 });

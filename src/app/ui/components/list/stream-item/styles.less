@@ -340,4 +340,30 @@
 			}
 		}
 	}
+
+	> .stream-details {
+		padding: .35em 0;
+
+		> .stream-title {
+			display: -webkit-box;
+			min-height: ( 2 * unit( @line-height-base, em ) );
+			-webkit-line-clamp: 2;
+			-webkit-box-orient: vertical;
+			overflow: hidden;
+			overflow-wrap: anywhere;
+		}
+
+		> .stream-game {
+			.text-overflow();
+
+			> i {
+				margin-right: .35em;
+			}
+		}
+	}
+
+	&.details-below > .preview::after {
+		top: 50%;
+	}
+
 }

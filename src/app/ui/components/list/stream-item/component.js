@@ -17,6 +17,7 @@ export default ListItemComponent.extend({
 
 	classNameBindings: [
 		":stream-item-component",
+		"showDetailsBelow:details-below",
 		"showGame:show-game",
 		"settings.content.streams.show_flag:show-flag",
 		"settings.content.streams.show_info:show-info",
@@ -30,6 +31,8 @@ export default ListItemComponent.extend({
 	user: alias( "content.user" ),
 	/** @type {TwitchChannel} */
 	channel: alias( "content.channel" ),
+
+	showDetailsBelow: false,
 
 	expanded: false,
 	locked  : false,

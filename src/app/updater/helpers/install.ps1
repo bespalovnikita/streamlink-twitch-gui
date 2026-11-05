@@ -348,6 +348,38 @@ public static class StreamlinkUpdaterLauncher {
 		return result.Append('\\', slashes * 2).Append('"').ToString();
 	}
 
+	private static void StopOwnedProcess(Process process) {
+		try { if (process.HasExited) { return; } } catch (InvalidOperationException) { return; }
+		try {
+			ProcessStartInfo stop = new ProcessStartInfo();
+			stop.FileName = Path.Combine(Environment.GetEnvironmentVariable("SystemRoot"),
+				@"System32\taskkill.exe");
+			stop.Arguments = "/PID " + process.Id.ToString() + " /T /F";
+			stop.UseShellExecute = false;
+			stop.CreateNoWindow = true;
+			stop.RedirectStandardOutput = true;
+			stop.RedirectStandardError = true;
+			using (Process killer = new Process()) {
+				killer.StartInfo = stop;
+				killer.OutputDataReceived += delegate(object sender, DataReceivedEventArgs e) {};
+				killer.ErrorDataReceived += delegate(object sender, DataReceivedEventArgs e) {};
+				killer.Start();
+				killer.BeginOutputReadLine();
+				killer.BeginErrorReadLine();
+				if (!killer.WaitForExit(5000)) {
+					try { killer.Kill(); } catch (Exception) {}
+				}
+			}
+		} catch (Exception) {}
+		try { if (process.WaitForExit(5000)) { return; } } catch (InvalidOperationException) {
+			return;
+		}
+		try { process.Kill(); } catch (Exception) {}
+		if (!process.WaitForExit(5000)) {
+			throw new InvalidOperationException("The updater PowerShell process did not stop");
+		}
+	}
+
 	[STAThread]
 	public static int Main(string[] args) {
 		string directory = Path.GetFullPath(AppDomain.CurrentDomain.BaseDirectory)
@@ -391,14 +423,20 @@ public static class StreamlinkUpdaterLauncher {
 						process.ErrorDataReceived += delegate(object sender, DataReceivedEventArgs e) {
 							log.Write(e.Data);
 						};
-						process.Start();
-						process.StandardInput.Close();
-						process.BeginOutputReadLine();
-						process.BeginErrorReadLine();
-						// The updated app can inherit a pipe, so do not wait for its EOF.
-						while (!process.WaitForExit(1000)) {}
-						Thread.Sleep(100);
-						return process.ExitCode;
+						bool started = false;
+						try {
+							started = process.Start();
+							process.StandardInput.Close();
+							process.BeginOutputReadLine();
+							process.BeginErrorReadLine();
+							// The updated app can inherit a pipe; do not wait for its EOF.
+							while (!process.WaitForExit(1000)) {}
+							Thread.Sleep(100);
+							return process.ExitCode;
+						} catch {
+							if (started) { StopOwnedProcess(process); }
+							throw;
+						}
 					}
 				} catch (Exception error) {
 					log.Write(error.Message);

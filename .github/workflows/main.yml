@@ -55,6 +55,9 @@ jobs:
           else
             yarn run grunt test:coverage
           fi
+      - name: Test release publication
+        if: startsWith(matrix.os, 'ubuntu')
+        run: node --test .github/tests/publish-master-release.cjs
       - name: I18n
         if: startsWith(matrix.os, 'ubuntu')
         run: yarn run grunt webpack:i18n
@@ -100,6 +103,32 @@ jobs:
           if-no-files-found: error
           retention-days: 30
           compression-level: 0
+
+  master_release:
+    name: Publish master release
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    needs:
+      - artifact
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    concurrency:
+      group: master-release-${{ github.sha }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: streamlink-twitch-gui-linux64-${{ github.sha }}
+          path: dist/
+      - name: Publish GitHub prerelease
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: bash .github/scripts/publish-master-release.sh
 
   release:
     name: New release

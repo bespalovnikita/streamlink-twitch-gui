@@ -16,7 +16,7 @@
 
 ## Установка для пользователя
 
-Готовые сборки доступны в [официальных релизах](https://github.com/streamlink/streamlink-twitch-gui/releases). Подробности установки — в [wiki](https://github.com/streamlink/streamlink-twitch-gui/wiki).
+Предварительные сборки этого форка для Linux x64 доступны в [Releases форка](https://github.com/bespalovnikita/streamlink-twitch-gui/releases). Официальные сборки upstream доступны в [официальных релизах](https://github.com/streamlink/streamlink-twitch-gui/releases). Подробности установки — в [wiki](https://github.com/streamlink/streamlink-twitch-gui/wiki).
 
 Отдельно установите Streamlink и совместимый видеопроигрыватель, например VLC или mpv. GUI управляет запуском трансляций, но не заменяет Streamlink. Если исполняемые файлы не определились автоматически, укажите пути к ним в настройках приложения.
 
@@ -85,8 +85,14 @@ GitHub Actions запускает проверки при push и для pull re
 в разделе **Actions → запуск workflow → Artifacts** под именем
 `streamlink-twitch-gui-linux64-<полный SHA коммита>` и хранится 30 дней.
 В PR и других ветках эта задача пропускается; при ошибке проверки публикации нет.
-Это сборка текущего `master`; существующая публикация upstream-релизов по тегам
-сохранена отдельно.
+Затем `Publish master release` скачивает артефакт этого же запуска и публикует
+архив с SHA256 в [Releases форка](https://github.com/bespalovnikita/streamlink-twitch-gui/releases).
+Каждому коммиту соответствует отдельный предварительный релиз с тегом
+`v<версия package.json>-master.g<полный SHA>`; эти файлы не ограничены 30-дневным
+сроком хранения артефактов Actions. Повторный запуск не заменяет опубликованные
+файлы; незавершённая загрузка остаётся черновиком и может быть повторена.
+Релиз создаётся только после успешных тестов и упаковки. Существующая публикация
+стабильных upstream-релизов по тегам сохранена отдельно.
 
 Для запрета слияния без проверок включите в настройках GitHub ruleset для `master`:
 обязательный PR и успешные статусы `Test (ubuntu-latest)` и

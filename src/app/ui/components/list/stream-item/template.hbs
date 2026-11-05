@@ -10,30 +10,47 @@
 	clickable=(bool-not expanded)
 	tagName="section"
 	class=(if expanded "expanded")
-	title=(unless expanded
+	title=(unless (bool-or expanded showDetailsBelow)
 		(unless infoTitle content.title content.game_name)
 		""
 	)
 	action=(action "collapse")
 }}
-	<footer class="{{if (bool-or infoTitle showGame) 'shaded'}} {{if expanded 'expanded'}} {{if locked 'locked'}}">
-		<div class="bottom {{unless (bool-or infoTitle showGame) 'hidden'}}">
-			<div class="info-game">{{#if content.game_id}}<i class="fa fa-gamepad"></i>{{#link-to "games.game" content.game_id title=content.game_name}}{{content.game_name}}{{/link-to}}{{/if}}</div>
-			<div class="info-title"><i></i><span>{{content.title}}</span></div>
-		</div>
-		<div class="details">
-			<div>
-				<div class="stats"></div>
-				<div class="status">
-					{{embedded-links text=content.title}}
+	{{#unless showDetailsBelow}}
+		<footer class="{{if (bool-or infoTitle showGame) 'shaded'}} {{if expanded 'expanded'}} {{if locked 'locked'}}">
+			<div class="bottom {{unless (bool-or infoTitle showGame) 'hidden'}}">
+				<div class="info-game">{{#if content.game_id}}<i class="fa fa-gamepad"></i>{{#link-to "games.game" content.game_id title=content.game_name}}{{content.game_name}}{{/link-to}}{{/if}}</div>
+				<div class="info-title"><i></i><span>{{content.title}}</span></div>
+			</div>
+			<div class="details">
+				<div>
+					<div class="stats"></div>
+					<div class="status">
+						{{embedded-links text=content.title}}
+					</div>
 				</div>
 			</div>
+		</footer>
+		<div class="btn-expand" title="{{t (concat 'components.stream-item.details.' (unless expanded 'show' (if locked 'unlock' 'lock')))}}" {{action "expand" bubbles=false}}>
+			<i class="fa {{unless expanded 'fa-chevron-up' (if locked 'fa-lock' 'fa-unlock-alt')}}"></i>
 		</div>
-	</footer>
-	<div class="btn-expand" title="{{t (concat 'components.stream-item.details.' (unless expanded 'show' (if locked 'unlock' 'lock')))}}" {{action "expand" bubbles=false}}>
-		<i class="fa {{unless expanded 'fa-chevron-up' (if locked 'fa-lock' 'fa-unlock-alt')}}"></i>
-	</div>
+	{{/unless}}
 {{/stream-preview-image}}
+{{#if showDetailsBelow}}
+	<div class="stream-details">
+		<div class="stream-title">{{content.title}}</div>
+		{{#if content.game_name}}
+			<div class="stream-game">
+				<i class="fa fa-gamepad" aria-hidden="true"></i>
+				{{#if content.game_id}}
+					{{#link-to "games.game" content.game_id}}{{content.game_name}}{{/link-to}}
+				{{else}}
+					{{content.game_name}}
+				{{/if}}
+			</div>
+		{{/if}}
+	</div>
+{{/if}}
 <footer>
 	<span title="{{content.titleStartedAt}}"><i class="fa fa-clock-o"></i> {{hours-from-now content.started_at interval=60000}}</span>
 	{{#if content.isVodcast}}<span class="vodcast-indicator" title="{{t 'components.stream-item.vodcast'}}"><i class="fa fa-recycle"></i></span>{{/if}}

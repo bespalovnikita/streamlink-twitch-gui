@@ -1,0 +1,42 @@
+title: Application updates
+description: Updates from master are checked when the application starts. Your settings and sign-in will be kept.
+current-version: "Current version: {version}"
+current-commit: "Build: {commit}"
+available-version: "New version: {version}"
+status:
+    idle: Ready to check for updates.
+    checking: Checking for updates…
+    current: You have the latest available master build.
+    available: A new master build is available.
+    downloading: Downloading the update…
+    preparing: Verifying and preparing the update…
+    ready: The update is ready to install. Restart the application when you are ready.
+    installing: Restarting to install the update…
+    error: The update could not be completed.
+    unsupported: Automatic updates are not available for this build.
+action:
+    check: Check for updates
+    download: Download update
+    cancel: Cancel download
+    later: Later
+    skip: Skip this version
+    restart: Restart and install
+    confirm-restart: Restart anyway
+    back: Back
+warning:
+    streams: Open streams may close when the application restarts. Restart and install the update?
+    settings: There are unapplied settings. Save or discard them in Settings before restarting.
+error:
+    rollback: The update could not be completed. The previous application version has been restored; your settings have been preserved.
+    generic: Could not update the application. Please try again.
+    offline: Could not reach the update server. Check your connection and try again.
+    unsupported: This build does not support automatic updates. Use a Windows x64 or Linux x64 portable release.
+    download: Could not download the update. Check your connection and try again.
+    integrity: The downloaded update failed verification. Download it again.
+    archive: Could not unpack the update. Download it again.
+    location: The application cannot be updated in this folder. Move it to a writable folder and try again.
+    permission: The updater cannot write to the application folder. Check folder permissions and try again.
+    busy: An update is already in progress. Wait for it to finish.
+    start: Could not start the update installer. Please try again.
+    settings: Save or discard your unapplied settings before restarting to install the update.
+progress: "Downloaded: {percent}%"

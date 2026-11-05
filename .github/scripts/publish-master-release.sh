@@ -21,6 +21,8 @@ if [[ "$(LC_ALL=C sort "${checksums[0]}")" != "$expected_checksums" ]]; then
   exit 1
 fi
 
+node "${BASH_SOURCE[0]%/*}/create-update-manifest.cjs"
+
 version="$(node -p 'require("./package.json").version')"
 tag="v${version}-master.g${GITHUB_SHA}"
 notes_file="$(mktemp)"
@@ -50,7 +52,7 @@ fi
 
 if [[ "$is_draft" == true ]]; then
   # Only a draft can be resumed; published assets remain unchanged on retries.
-  gh release upload "$tag" "${archives[@]}" "${checksums[@]}" --clobber
+  gh release upload "$tag" "${archives[@]}" "${checksums[@]}" dist/update.json --clobber
   gh release edit "$tag" --draft=false --prerelease --latest=false
 elif [[ "$is_draft" != false ]]; then
   echo "Unexpected release state" >&2

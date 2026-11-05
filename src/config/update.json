@@ -1,8 +1,10 @@
 {
+	"repository": "bespalovnikita/streamlink-twitch-gui",
+	"manifest": "update.json",
 	"check-again": 604800000,
 	"show-debug-message": 86400000,
 	"githubreleases": {
 		"host": "https://api.github.com",
-		"namespace": "repos/streamlink/streamlink-twitch-gui"
+		"namespace": "repos/bespalovnikita/streamlink-twitch-gui"
 	}
 }

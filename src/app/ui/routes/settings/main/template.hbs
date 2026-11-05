@@ -1,5 +1,15 @@
 <fieldset>
 {{#settings-row
+	(t "updater.title")
+	(t "updater.description")
+	icon="fa-download"
+}}
+	{{update-status}}
+{{/settings-row}}
+</fieldset>
+
+<fieldset>
+{{#settings-row
 	(t "settings.main.language.title")
 	(t "settings.main.language.description")
 	icon="fa-language"

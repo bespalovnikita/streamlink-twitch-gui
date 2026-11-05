@@ -82,6 +82,18 @@ function fixture( context, initialState = {}, options = {} ) {
 	[ bin, dist, temporary ].forEach( folder => fs.mkdirSync( folder ) );
 	const manifest = path.join( directory, "package.json" );
 	fs.writeFileSync( manifest, JSON.stringify({ version: "2.5.3" }) );
+	const application = path.join( directory, "work/windows-app" );
+	fs.mkdirSync( application, { recursive: true } );
+	fs.writeFileSync( path.join( application, "build-info.json" ), JSON.stringify({
+		schema: 1,
+		channel: "master",
+		appName: "streamlink-twitch-gui",
+		repository: repo,
+		version: "2.5.3",
+		commit: sha,
+		commitTime: 1704067200,
+		buildNumber: 23
+	}) );
 	fs.writeFileSync( path.join( bin, "gh" ), fakeGh, { mode: 0o755 } );
 	const archive = Buffer.from( "Fake Linux archive for release publishing tests\n" );
 	const digest = createHash( "sha256" ).update( archive ).digest( "hex" );
@@ -128,6 +140,7 @@ function fixture( context, initialState = {}, options = {} ) {
 				TMPDIR: temporary,
 				GH_REPO: repo,
 				GITHUB_SHA: sha,
+				GITHUB_RUN_NUMBER: "23",
 				GITHUB_STEP_SUMMARY: summaryFile,
 				FAKE_GH_STATE: stateFile,
 				FAKE_GH_CALLS: callsFile,
@@ -168,8 +181,8 @@ function expectPublication( files, expectedActions ) {
 	const upload = changes.find( ({ args }) => args[ 1 ] === "upload" );
 	assert.ok( upload.args.includes( "--clobber" ), "Retries draft assets safely" );
 	assert.deepEqual( upload.args.slice( 3 ).filter( arg => arg !== "--clobber" ).sort(), [
-		`dist/${archiveName}`, `dist/${windowsName}`, `dist/${checksumName}`
-	].sort(), "Uploads the Linux archive, Windows archive and shared checksums" );
+		`dist/${archiveName}`, `dist/${windowsName}`, `dist/${checksumName}`, "dist/update.json"
+	].sort(), "Uploads both archives, shared checksums and the update manifest" );
 	const verify = calls.findIndex( ({ args }) => args[ 0 ] === "api" );
 	assert.ok( verify >= 0 && verify < calls.indexOf( upload ), "Verifies the tag before upload" );
 	assert.deepEqual( calls[ verify ].args, [
@@ -310,6 +323,7 @@ test( "Packages the Windows app with hidden files and checksums for both platfor
 	assert.deepEqual( entries.sort(), [
 		"streamlink-twitch-gui/",
 		"streamlink-twitch-gui/.portable-config",
+		"streamlink-twitch-gui/build-info.json",
 		"streamlink-twitch-gui/streamlink-twitch-gui.exe"
 	].sort(), "Uses the application directory prefix and preserves hidden files" );
 	assert.equal( runArchiveTool( files, "unzip", [

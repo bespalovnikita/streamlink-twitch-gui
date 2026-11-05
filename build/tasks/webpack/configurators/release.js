@@ -42,10 +42,16 @@ module.exports = {
 
 		config.plugins.push(
 			new CopyWebpackPlugin({
-				patterns: [{
-					from: r( pProjectRoot, "LICENSE" ),
-					to: "[name].txt"
-				}]
+				patterns: [
+					{
+						from: r( pProjectRoot, "LICENSE" ),
+						to: "[name].txt"
+					},
+					{
+						from: r( pProjectRoot, "src/app/updater/helpers" ),
+						to: "updater"
+					}
+				]
 			})
 		);
 	},

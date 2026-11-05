@@ -1,6 +1,7 @@
 import { module, test } from "qunit";
 import { setupApplicationTest } from "ember-qunit";
 import { buildFakeApplication } from "test-utils";
+import { setupStore } from "store-utils";
 import { settled, visit } from "@ember/test-helpers";
 import sinon from "sinon";
 
@@ -43,21 +44,20 @@ module( "ui/routes/user/followed-streams/route", function( hooks ) {
 		ModalService: Service.extend({
 			isModalOpened: false
 		}),
-		SettingsService: Service.extend(),
-		StoreService: Service.extend()
+		SettingsService: Service.extend()
 	});
 
 	setupApplicationTest( hooks );
 
 	hooks.beforeEach(function() {
+		const { store } = setupStore( this.owner );
 		this.clock = sinon.useFakeTimers({
 			global: window,
 			toFake: [ "setInterval", "clearInterval" ]
 		});
 		this.route = this.owner.lookup( "route:user.followed-streams" );
 		this.records = [];
-		this.query = sinon.stub().callsFake( async () => this.records );
-		this.owner.lookup( "service:store" ).query = this.query;
+		this.query = sinon.stub( store, "query" ).callsFake( async () => this.records );
 		sinon.stub( this.route, "calcFetchSize" ).returns( 2 );
 		sinon.stub( this.route, "preload" ).returnsArg( 0 );
 		sinon.stub( this.route, "modelItemLoader" ).resolves();

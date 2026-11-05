@@ -280,6 +280,7 @@ async function prepareUpdate( options ) {
 		stageDir: path.join( parent, `${base}-stage` ),
 		backupDir: path.join( parent, `${base}-backup` ),
 		helperPath: path.join( jobDir, platform === "win32" ? "install.ps1" : "install.sh" ),
+		launcherPath: platform === "win32" ? path.join( jobDir, "launcher.exe" ) : null,
 		platform, arch, commit: manifest.commit, token,
 		ackFile: path.join( jobDir, "healthy" ), readyFile: path.join( jobDir, "ready" ),
 		statusFile: path.join( jobDir, "status.json" ),
@@ -361,13 +362,11 @@ async function startInstall( job, { parentPid = process.pid, args = [] } = {} ) 
 		await fsp.writeFile( startedFile, job.token, { flag: "wx" } );
 	} catch ( error ) { throw failure( "UPDATE_BUSY", error ); }
 	await fsp.writeFile( job.jobFile, JSON.stringify( current ), { mode: 0o600 } );
-	// Node 20 can exit detached PowerShell before executing a script without a console.
+	// A detached GUI launcher avoids Node 20's detached PowerShell console regression.
 	// https://github.com/nodejs/node/issues/51018
-	const executable = job.platform === "win32" ? "conhost.exe" : "bash";
+	const executable = job.platform === "win32" ? job.launcherPath : "bash";
 	const parameters = job.platform === "win32"
-		? [ "--headless", "powershell.exe", "-NoProfile", "-NonInteractive",
-			"-ExecutionPolicy", "Bypass", "-File",
-			job.helperPath, "-JobFile", job.jobFile ]
+		? [ job.helperPath, job.jobFile ]
 		: [ job.helperPath, job.jobFile, job.installDir, job.stageDir, job.backupDir,
 			job.jobDir, job.token, String( parentPid ), String( job.timeoutMs ),
 			String( job.renameTimeoutMs || 30000 ), ...args ];
@@ -378,14 +377,10 @@ async function startInstall( job, { parentPid = process.pid, args = [] } = {} ) 
 		try {
 			child = spawn( executable, parameters, {
 				detached: true, windowsHide: true,
-				stdio: [ job.platform === "win32" ? "pipe" : "ignore", log.fd, log.fd ],
+				stdio: [ "ignore", log.fd, log.fd ],
 				cwd: job.jobDir
 			});
 			child.once( "error", error => { spawnError = error; } );
-			if ( child.stdin ) {
-				child.stdin.on( "error", () => {} );
-				child.stdin.end();
-			}
 		} finally { await log.close(); }
 		const timeout = Math.max( 100, Math.min( 30000, job.handshakeTimeoutMs || 10000 ) );
 		for ( let attempt = 0; attempt < timeout / 100; attempt++ ) {
@@ -440,11 +435,13 @@ async function verifyJob( job ) {
 	const base = jobBase( job.token );
 	const directory = path.join( path.dirname( install ), base );
 	const helper = path.join( directory, job.platform === "win32" ? "install.ps1" : "install.sh" );
+	const launcher = job.platform === "win32" ? path.join( directory, "launcher.exe" ) : null;
 	const archiveName = job.platform === "win32" ? "update.zip" : "update.tar.gz";
 	const archive = path.join( directory, archiveName );
 	if ( job.installDir !== install || job.jobDir !== directory
 		|| ![ "win32", "linux" ].includes( job.platform ) || job.arch !== "x64"
 		|| job.helperPath !== helper || job.archivePath !== archive
+		|| job.launcherPath !== launcher
 		|| job.stageDir !== `${directory}-stage` || job.backupDir !== `${directory}-backup`
 		|| job.jobFile !== path.join( directory, "job.json" )
 		|| job.readyFile !== path.join( directory, "ready" )

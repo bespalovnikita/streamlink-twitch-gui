@@ -86,7 +86,7 @@ function Read-Job {
 		}
 	}
 	foreach ($key in @('installDir', 'jobDir', 'stageDir', 'backupDir', 'archivePath',
-		'helperPath', 'jobFile', 'ackFile', 'readyFile', 'statusFile')) {
+		'helperPath', 'launcherPath', 'jobFile', 'ackFile', 'readyFile', 'statusFile')) {
 		$data.$key = Canonical-Path $data.$key
 		Assert-NoReparse $data.$key
 	}
@@ -95,6 +95,9 @@ function Read-Job {
 	}
 	if (-not (Same-Path $data.archivePath (Join-Path $data.jobDir 'update.zip'))) {
 		Fail 'UPDATE_LOCATION' 'The archive path does not match the job'
+	}
+	if (-not (Same-Path $data.launcherPath (Join-Path $data.jobDir 'launcher.exe'))) {
+		Fail 'UPDATE_LOCATION' 'The launcher path does not match the job'
 	}
 	$parent = [IO.Path]::GetDirectoryName($data.installDir)
 	if ([string]::IsNullOrEmpty($parent) -or
@@ -116,15 +119,15 @@ function Read-Job {
 			Fail 'UPDATE_LOCATION' 'Update directories must be siblings'
 		}
 	}
-	foreach ($path in @($data.jobFile, $data.helperPath, $data.ackFile,
+	foreach ($path in @($data.jobFile, $data.helperPath, $data.launcherPath, $data.ackFile,
 		$data.readyFile, $data.statusFile)) {
 		if (-not (Same-Path ([IO.Path]::GetDirectoryName($path)) $data.jobDir)) {
 			Fail 'UPDATE_LOCATION' 'Update control files must be in the job directory'
 		}
 	}
-	$controls = @($data.jobFile, $data.helperPath, $data.ackFile,
+	$controls = @($data.jobFile, $data.helperPath, $data.launcherPath, $data.ackFile,
 		$data.readyFile, $data.statusFile)
-	if (@($controls | Sort-Object -Unique).Count -ne 5 -or
+	if (@($controls | Sort-Object -Unique).Count -ne 6 -or
 		(Test-Path -LiteralPath $data.backupDir) -or
 		(Test-Path -LiteralPath $data.ackFile)) {
 		Fail 'UPDATE_LOCATION' 'Update paths already exist or overlap'
@@ -277,6 +280,141 @@ function Expand-Application {
 	Check-Package
 }
 
+function Compile-Launcher {
+	$script:failureCode = 'UPDATE_START'
+	Write-Phase 'launcher'
+	if (Test-Path -LiteralPath $script:job.launcherPath) {
+		Fail 'UPDATE_START' 'The update launcher already exists'
+	}
+	$source = @'
+using System;
+using System.Diagnostics;
+using System.IO;
+using System.Text;
+using System.Text.RegularExpressions;
+using System.Threading;
+
+public static class StreamlinkUpdaterLauncher {
+	private sealed class BoundedLog : IDisposable {
+		private readonly object gate = new object();
+		private readonly FileStream stream;
+		private int remaining = 16384;
+		private bool closed;
+
+		public BoundedLog(string filename) {
+			stream = new FileStream(filename, FileMode.Create, FileAccess.Write, FileShare.Read);
+		}
+
+		public void Write(string value) {
+			if (value == null) { return; }
+			lock (gate) {
+				if (closed || remaining == 0) { return; }
+				try {
+					value = Regex.Replace(value, @"(?i)\b[a-f0-9]{64}\b", "[redacted]");
+					byte[] bytes = Encoding.UTF8.GetBytes(value + "\n");
+					int length = Math.Min(remaining, bytes.Length);
+					stream.Write(bytes, 0, length);
+					stream.Flush();
+					remaining -= length;
+				} catch (IOException) {
+					remaining = 0;
+				}
+			}
+		}
+
+		public void Dispose() {
+			lock (gate) {
+				if (closed) { return; }
+				closed = true;
+				stream.Dispose();
+			}
+		}
+	}
+
+	private static string Quote(string value) {
+		StringBuilder result = new StringBuilder("\"");
+		int slashes = 0;
+		foreach (char character in value) {
+			if (character == '\\') {
+				slashes++;
+			} else if (character == '"') {
+				result.Append('\\', slashes * 2 + 1).Append('"');
+				slashes = 0;
+			} else {
+				result.Append('\\', slashes).Append(character);
+				slashes = 0;
+			}
+		}
+		return result.Append('\\', slashes * 2).Append('"').ToString();
+	}
+
+	[STAThread]
+	public static int Main(string[] args) {
+		string directory = Path.GetFullPath(AppDomain.CurrentDomain.BaseDirectory)
+			.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+		try {
+			using (BoundedLog log = new BoundedLog(Path.Combine(directory, "powershell.log"))) {
+				try {
+					if (args.Length != 2 || !Path.IsPathRooted(args[0]) ||
+						!Path.IsPathRooted(args[1])) {
+						throw new InvalidOperationException("Unexpected updater launcher arguments");
+					}
+					string script = Path.GetFullPath(args[0]);
+					string job = Path.GetFullPath(args[1]);
+					if (!String.Equals(Path.GetDirectoryName(script), directory,
+						StringComparison.OrdinalIgnoreCase) ||
+						!String.Equals(Path.GetDirectoryName(job), directory,
+						StringComparison.OrdinalIgnoreCase) ||
+						!String.Equals(Path.GetFileName(script), "install.ps1",
+						StringComparison.OrdinalIgnoreCase) ||
+						!String.Equals(Path.GetFileName(job), "job.json",
+						StringComparison.OrdinalIgnoreCase)) {
+						throw new InvalidOperationException("Unexpected updater launcher paths");
+					}
+					string windows = Environment.GetEnvironmentVariable("SystemRoot");
+					ProcessStartInfo start = new ProcessStartInfo();
+					start.FileName = Path.Combine(windows,
+						@"System32\WindowsPowerShell\v1.0\powershell.exe");
+					start.WorkingDirectory = directory;
+					start.UseShellExecute = false;
+					start.CreateNoWindow = true;
+					start.RedirectStandardInput = true;
+					start.RedirectStandardOutput = true;
+					start.RedirectStandardError = true;
+					start.Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File " +
+						Quote(script) + " -JobFile " + Quote(job);
+					using (Process process = new Process()) {
+						process.StartInfo = start;
+						process.OutputDataReceived += delegate(object sender, DataReceivedEventArgs e) {
+							log.Write(e.Data);
+						};
+						process.ErrorDataReceived += delegate(object sender, DataReceivedEventArgs e) {
+							log.Write(e.Data);
+						};
+						process.Start();
+						process.StandardInput.Close();
+						process.BeginOutputReadLine();
+						process.BeginErrorReadLine();
+						// The updated app can inherit a pipe, so do not wait for its EOF.
+						while (!process.WaitForExit(1000)) {}
+						Thread.Sleep(100);
+						return process.ExitCode;
+					}
+				} catch (Exception error) {
+					log.Write(error.Message);
+					return 1;
+				}
+			}
+		} catch {
+			return 1;
+		}
+	}
+}
+'@
+	Add-Type -TypeDefinition $source -OutputAssembly $script:job.launcherPath `
+		-OutputType WindowsApplication | Out-Null
+}
+
 function Quote-Argument([string]$Value) {
 	# ProcessStartInfo.Arguments follows the Windows CRT command line rules.
 	return '"' + ([regex]::Replace($Value, '(\\*)"', '$1$1\"') -replace '(\\+)$', '$1$1') + '"'
@@ -385,6 +523,7 @@ try {
 	$script:job = Read-Job
 	if ($Prepare) {
 		Expand-Application
+		Compile-Launcher
 	} else {
 		Install-Application
 	}

@@ -193,7 +193,7 @@ function ownChild( context, child ) {
 }
 
 function diagnoseTransaction( context, job, error ) {
-	const logs = [ "helper.log", "helper-phase.txt", "status.json" ]
+	const logs = [ "helper.log", "powershell.log", "helper-phase.txt", "status.json" ]
 		.map( filename => path.join( job.jobDir, filename ) );
 	if ( error.bootstrapErrorFile ) { logs.push( error.bootstrapErrorFile ); }
 	for ( const log of logs ) {
@@ -347,37 +347,19 @@ exec /usr/bin/mv "$@"
 	return { current, job, status, event, literalArgs };
 }
 
-test( "detached Windows PowerShell executes through a headless console", {
-	skip: !isWindows, timeout: 30000
+test( "prepares a Windows GUI launcher before replacing application files", {
+	skip: !isWindows, timeout: 15000
 }, async context => {
-	const root = fs.mkdtempSync( path.join( os.tmpdir(), "stgui-ps-probe-" ) );
-	context.after( () => fs.promises.rm( root, { recursive: true, force: true } ) );
-	const outcomes = {};
-	for ( const mode of [ "ignore", "pipe", "nul", "conhost" ] ) {
-		const marker = path.join( root, `${mode}.txt` );
-		const log = fs.openSync( path.join( root, `${mode}.log` ), "a" );
-		const input = mode === "nul" ? fs.openSync( "NUL", "r" )
-			: mode === "conhost" ? "pipe" : mode;
-		const code = "[IO.File]::WriteAllText($env:STGUI_PROBE_FILE, 'executed')";
-		const args = [ "-NoProfile", "-NonInteractive", "-Command", code ];
-		const program = mode === "conhost" ? "conhost.exe" : "powershell.exe";
-		const child = spawn( program, mode === "conhost"
-			? [ "--headless", "powershell.exe", ...args ] : args, {
-				detached: true, windowsHide: true,
-				stdio: [ input, log, log ], env: { ...process.env, STGUI_PROBE_FILE: marker }
-			} );
-		fs.closeSync( log );
-		if ( mode === "nul" ) { fs.closeSync( input ); }
-		if ( child.stdin ) { child.stdin.on( "error", () => {} ); child.stdin.end(); }
-		const timeout = setTimeout( () => child.kill(), 5000 );
-		try {
-			const [ exitCode, signal ] = await once( child, "exit" );
-			outcomes[mode] = { executed: fs.existsSync( marker ), exitCode, signal };
-		} finally { clearTimeout( timeout ); }
-	}
-	context.diagnostic( JSON.stringify( outcomes ) );
-	assert.equal( outcomes.conhost.executed, true );
-	assert.equal( outcomes.conhost.exitCode, 0 );
+	const current = await fixture( context );
+	const job = await updater.prepareUpdate( current );
+	const binary = fs.readFileSync( job.launcherPath );
+	assert.equal( binary.readUInt16LE( 0 ), 0x5a4d );
+	const pe = binary.readUInt32LE( 60 );
+	assert.equal( binary.readUInt32LE( pe ), 0x4550 );
+	assert.equal( binary.readUInt16LE( pe + 24 + 68 ), 2, "The launcher is a GUI executable" );
+	assert.equal( fs.existsSync( path.join( current.installDir, "old-file.txt" ) ), true );
+	assert.equal( await updater.discardUpdate( job ), true );
+	assertPreserved( current );
 } );
 
 test( "swaps the complete app after exit and accepts only a healthy new startup", {

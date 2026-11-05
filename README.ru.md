@@ -16,7 +16,7 @@
 
 ## Установка для пользователя
 
-Предварительные сборки этого форка для Linux x64 доступны в [Releases форка](https://github.com/bespalovnikita/streamlink-twitch-gui/releases). Официальные сборки upstream доступны в [официальных релизах](https://github.com/streamlink/streamlink-twitch-gui/releases). Подробности установки — в [wiki](https://github.com/streamlink/streamlink-twitch-gui/wiki).
+Предварительные сборки этого форка для Windows x64 и Linux x64 доступны в [Releases форка](https://github.com/bespalovnikita/streamlink-twitch-gui/releases). Для Windows скачайте файл `*-win64.zip`, распакуйте архив и запустите `streamlink-twitch-gui.exe`. Официальные сборки upstream доступны в [официальных релизах](https://github.com/streamlink/streamlink-twitch-gui/releases). Подробности установки — в [wiki](https://github.com/streamlink/streamlink-twitch-gui/wiki).
 
 Отдельно установите Streamlink и совместимый видеопроигрыватель, например VLC или mpv. GUI управляет запуском трансляций, но не заменяет Streamlink. Если исполняемые файлы не определились автоматически, укажите пути к ним в настройках приложения.
 
@@ -79,14 +79,20 @@ GitHub Actions запускает проверки при push и для pull re
 на Linux и Windows, проверки файлов и переводов, production-сборку. Зависимости
 устанавливаются с `--frozen-lockfile`; изменение lock-файла при установке запрещено.
 
+В проверках PR и `master` Windows-приложение дополнительно компилируется нативно
+на Windows. Готовые файлы доступны в **Artifacts** того же запуска как
+`streamlink-twitch-gui-win64-<SHA>`; ZIP артефакта можно распаковать и запустить
+`streamlink-twitch-gui.exe`.
+
 После push в `master` (в том числе после merge, squash или rebase PR) задача
 `Publish master artifact` выполняется только после успеха всей матрицы `Test`.
 Она собирает архив Linux x64 вместе с контрольными суммами. Архив доступен
 в разделе **Actions → запуск workflow → Artifacts** под именем
 `streamlink-twitch-gui-linux64-<полный SHA коммита>` и хранится 30 дней.
 В PR и других ветках эта задача пропускается; при ошибке проверки публикации нет.
-Затем `Publish master release` скачивает артефакт этого же запуска и публикует
-архив с SHA256 в [Releases форка](https://github.com/bespalovnikita/streamlink-twitch-gui/releases).
+Затем `Publish master release` скачивает оба артефакта этого же запуска, упаковывает
+Windows-приложение штатным ZIP-скриптом проекта и публикует Linux-архив, Windows ZIP
+и общий SHA256 в [Releases форка](https://github.com/bespalovnikita/streamlink-twitch-gui/releases).
 Каждому коммиту соответствует отдельный предварительный релиз с тегом
 `v<версия package.json>-master.g<полный SHA>`; эти файлы не ограничены 30-дневным
 сроком хранения артефактов Actions. Повторный запуск не заменяет опубликованные

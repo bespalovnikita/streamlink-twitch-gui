@@ -6,20 +6,27 @@ set -euo pipefail
 [[ "$GITHUB_SHA" =~ ^[a-f0-9]{40}$ ]] || exit 1
 
 shopt -s nullglob
-archives=(dist/*.tar.gz)
+linux_archives=(dist/*-linux64.tar.gz)
+windows_archives=(dist/*-win64.zip)
+archives=(dist/*.tar.gz dist/*.zip)
 checksums=(dist/*-checksums.txt)
-if (( ${#archives[@]} != 1 || ${#checksums[@]} != 1 )); then
-  echo "Expected one Linux archive and one checksum file in dist/" >&2
+if (( ${#linux_archives[@]} != 1 || ${#windows_archives[@]} != 1 \
+  || ${#archives[@]} != 2 || ${#checksums[@]} != 1 )); then
+  echo "Expected Linux and Windows x64 archives and one checksum file in dist/" >&2
   exit 1
 fi
-(cd dist && sha256sum --check "${checksums[0]#dist/}")
+expected_checksums="$(cd dist && sha256sum "${archives[@]#dist/}" | LC_ALL=C sort)"
+if [[ "$(LC_ALL=C sort "${checksums[0]}")" != "$expected_checksums" ]]; then
+  echo "Checksums must match both release archives" >&2
+  exit 1
+fi
 
 version="$(node -p 'require("./package.json").version')"
 tag="v${version}-master.g${GITHUB_SHA}"
 notes_file="$(mktemp)"
 trap 'rm -f "$notes_file"' EXIT
 
-printf 'Предварительная сборка master для Linux x64.\n\nКоммит: `%s`.\n\nАрхив и SHA256 взяты из артефакта того же запуска CI после успешных проверок Linux и Windows.\n\nДля просмотра трансляций отдельно установите Streamlink и совместимый видеопроигрыватель.\n' \
+printf 'Предварительная сборка master для Windows x64 и Linux x64.\n\nКоммит: `%s`.\n\nWindows: скачайте архив *-win64.zip, распакуйте и запустите streamlink-twitch-gui.exe.\n\nАрхивы и SHA256 подготовлены из артефактов того же запуска CI после успешных проверок Linux и Windows.\n\nДля просмотра трансляций отдельно установите Streamlink и совместимый видеопроигрыватель.\n' \
   "$GITHUB_SHA" > "$notes_file"
 
 if ! release_sha="$(gh api "repos/${GH_REPO}/commits/${tag}" --jq .sha 2>/dev/null)"; then
@@ -53,5 +60,5 @@ fi
 release_url="$(gh release view "$tag" --json url --jq .url)"
 printf '%s\n' "$release_url"
 if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
-  printf '[Скачать сборку Linux x64](%s)\n' "$release_url" >> "$GITHUB_STEP_SUMMARY"
+  printf '[Скачать сборки Windows x64 и Linux x64](%s)\n' "$release_url" >> "$GITHUB_STEP_SUMMARY"
 fi

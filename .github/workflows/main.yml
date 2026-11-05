@@ -63,6 +63,20 @@ jobs:
         run: yarn run grunt webpack:i18n
       - name: Build
         run: yarn run grunt clean:tmp_prod webpack:prod
+      - name: Compile Windows x64 application
+        if: runner.os == 'Windows' && (github.event_name == 'pull_request' || github.ref == 'refs/heads/master')
+        env:
+          # Run the legacy .NET resource editor with the installed CLR 4 runtime.
+          COMPLUS_Version: v4.0.30319
+        run: yarn run grunt compile:win64
+      - name: Upload Windows x64 application
+        if: runner.os == 'Windows' && (github.event_name == 'pull_request' || github.ref == 'refs/heads/master')
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: streamlink-twitch-gui-win64-${{ github.sha }}
+          path: build/releases/streamlink-twitch-gui/win64/
+          if-no-files-found: error
+          include-hidden-files: true
       - name: Upload coverage data
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
@@ -124,6 +138,14 @@ jobs:
         with:
           name: streamlink-twitch-gui-linux64-${{ github.sha }}
           path: dist/
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: streamlink-twitch-gui-win64-${{ github.sha }}
+          path: work/windows-app/
+      - name: Package Windows x64 archive
+        run: |
+          export SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)"
+          bash .github/scripts/prepare-windows-release.sh
       - name: Publish GitHub prerelease
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -36,3 +36,21 @@
 		{{/form-button}}
 	{{/if}}
 </div>
+{{#if showCheck}}
+	<div class="button-list-horizontal updater-history-actions">
+		{{#form-button action=(action "history") disabled=versioncheck.historyBusy
+			classNames="btn-default updater-history" icon="fa-history"}}
+			{{t "updater.action.history"}}
+		{{/form-button}}
+		{{#form-button action=(action "export") disabled=versioncheck.diagnosticsBusy
+			classNames="btn-default updater-export" icon="fa-save"}}
+			{{t "updater.action.export"}}
+		{{/form-button}}
+	</div>
+	{{#if versioncheck.historyErrorKey}}
+		<p class="updater-history-error text-danger" role="alert">{{t versioncheck.historyErrorKey}}</p>
+	{{/if}}
+	{{#if versioncheck.diagnosticsSaved}}
+		<p class="updater-diagnostics-saved" role="status">{{t "updater.history.exported"}}</p>
+	{{/if}}
+{{/if}}

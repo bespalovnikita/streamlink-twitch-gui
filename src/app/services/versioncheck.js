@@ -13,6 +13,8 @@ import { platform, arch, cachedir } from "utils/node/platform";
 import { basename, dirname, join as joinPath } from "path";
 import * as client from "updater/client";
 import * as installer from "updater/install";
+import * as history from "updater/history";
+import LS from "init/initializers/localstorage/localstorage";
 
 
 const { "display-name": displayName } = mainConfig;
@@ -37,6 +39,13 @@ const errorKeys = {
 	UPDATE_BUSY: "updater.error.busy",
 	UPDATE_START: "updater.error.start",
 	UPDATE_ROLLBACK: "updater.error.rollback",
+	UPDATE_NO_SPACE: "updater.error.space",
+	UPDATE_PROFILE_BACKUP: "updater.error.profile",
+	UPDATE_PROFILE_RESTORE: "updater.error.profile",
+	INVALID_SIGNATURE: "updater.error.signature",
+	SIGNATURE_REQUIRED: "updater.error.signature",
+	MISSING_SIGNATURE: "updater.error.signature",
+	UNTRUSTED_SIGNING_KEY: "updater.error.signature",
 	SETTINGS_UNSAVED: "updater.error.settings"
 };
 
@@ -57,6 +66,12 @@ export default Service.extend( /** @class VersioncheckService */ {
 	progress: 0,
 	errorCode: "",
 	confirmingInstall: false,
+	historyEntries: null,
+	historyBusy: false,
+	historyError: "",
+	diagnosticsBusy: false,
+	diagnosticsSaved: false,
+	_historyTask: null,
 	_startupPromise: null,
 	_recordPromise: null,
 	_checkPromise: null,
@@ -75,6 +90,7 @@ export default Service.extend( /** @class VersioncheckService */ {
 		};
 	}),
 	installDir: computed(function() { return dirname( Process.execPath ); }),
+	historyFile: computed(function() { return joinPath( dataPath, "updater-history.json" ); }),
 	isSupported: computed(function() {
 		return !isDebug && !isDevelopment && arch === "x64"
 			&& [ "win32", "linux" ].includes( platform )
@@ -92,6 +108,15 @@ export default Service.extend( /** @class VersioncheckService */ {
 	statusKey: computed( "state", function() { return `updater.status.${this.state}`; }),
 	errorKey: computed( "errorCode", function() {
 		return this.errorCode ? errorKeys[ this.errorCode ] || "updater.error.generic" : "";
+	}),
+	historyErrorKey: computed( "historyError", function() {
+		if ( !this.historyError ) { return ""; }
+		return this.historyError === "UPDATE_DIAGNOSTICS"
+			? "updater.history.export-error" : "updater.history.error";
+	}),
+	hasFailedRelease: computed( "release", "model.failedCommit", function() {
+		return !!this.release && !!get( this, "model.failedCommit" )
+			&& this.release.manifest.commit === this.model.failedCommit;
 	}),
 	hasStreams: computed( "streaming.hasStreams", function() {
 		return !!get( this, "streaming.hasStreams" );
@@ -121,6 +146,13 @@ export default Service.extend( /** @class VersioncheckService */ {
 		if ( installer.readRollbackStatus ) {
 			const rollback = await installer.readRollbackStatus({ installDir: this.installDir });
 			if ( rollback ) {
+				if ( /^[a-f0-9]{40}$/.test( rollback.commit || "" ) ) {
+					set( this.model, "failedCommit", rollback.commit );
+					await this.model.save();
+				}
+				this._recordHistory( "rollback", "failed", {
+					commit: rollback.commit, code: rollback.code || "UPDATE_ROLLBACK"
+				});
 				this._fail({ code: "UPDATE_ROLLBACK" });
 				this.modal.openModal( "newrelease", this );
 				return;
@@ -150,6 +182,7 @@ export default Service.extend( /** @class VersioncheckService */ {
 			return Promise.resolve( null );
 		}
 		setProperties( this, { state: "checking", errorCode: "", confirmingInstall: false } );
+		this._recordHistory( "check", "started" );
 		this._checkPromise = this._queryRelease( manual );
 		return this._checkPromise;
 	},
@@ -165,19 +198,31 @@ export default Service.extend( /** @class VersioncheckService */ {
 			if ( !update ) {
 				await this._discardPreparedUpdate();
 				setProperties( this, { release: null, state: "current" } );
+				this._recordHistory( "check", "current" );
+				return null;
+			}
+			if ( !manual && this.model && this.model.failedCommit === update.manifest.commit ) {
+				await this._discardPreparedUpdate();
+				setProperties( this, { release: null, state: "blocked" } );
+				this._recordHistory( "check", "blocked", {
+					update, code: "UPDATE_PREVIOUS_FAILURE"
+				});
 				return null;
 			}
 			if ( !manual && this.model && this.model.skippedTag === update.tag ) {
 				await this._discardPreparedUpdate();
 				setProperties( this, { release: null, state: "idle" } );
+				this._recordHistory( "check", "skipped", { update } );
 				return null;
 			}
 			const ready = this._archivePath && this.release && this.release.tag === update.tag;
 			if ( !ready ) { await this._discardPreparedUpdate(); }
 			setProperties( this, { release: update, state: ready ? "ready" : "available" } );
+			this._recordHistory( "check", "available", { update } );
 			this.modal.openModal( "newrelease", this );
 			return update;
 		} catch ( error ) {
+			this._recordHistory( "check", "failed", { code: error.code } );
 			this._fail( error, this._archivePath && this.release ? "ready" : "error" );
 			return null;
 		} finally {
@@ -191,10 +236,18 @@ export default Service.extend( /** @class VersioncheckService */ {
 		const controller = new AbortController();
 		this._downloadController = controller;
 		setProperties( this, { state: "downloading", progress: 0, errorCode: "" } );
+		this._recordHistory( "download", "started", { update } );
 		try {
 			const destination = joinPath(
 				cachedir, "updates", update.manifest.commit, update.asset.name
 			);
+			await installer.checkUpdateSpace({
+				update, installDir: this.installDir, profileDir: dataPath,
+				downloadPath: destination, phase: "download"
+			});
+			if ( generation !== this._downloadGeneration || controller.signal.aborted ) {
+				return false;
+			}
 			const archivePath = await client.downloadUpdate( update, destination, {
 				signal: controller.signal,
 				onProgress: value => join( () => {
@@ -222,6 +275,7 @@ export default Service.extend( /** @class VersioncheckService */ {
 			}
 			if ( generation !== this._downloadGeneration ) { return false; }
 			setProperties( this, { state: "ready", progress: 100 } );
+			this._recordHistory( "download", "succeeded", { update } );
 			return true;
 		} catch ( error ) {
 			if ( generation !== this._downloadGeneration ) { return false; }
@@ -229,7 +283,9 @@ export default Service.extend( /** @class VersioncheckService */ {
 				controller.signal.aborted || error.code === "ABORTED" || error.name === "AbortError"
 			) {
 				setProperties( this, { state: "available", errorCode: "", progress: 0 } );
+				this._recordHistory( "download", "cancelled", { update } );
 			} else {
+				this._recordHistory( "download", "failed", { update, code: error.code } );
 				this._fail( error, this._archivePath ? "ready" : "error" );
 			}
 			return false;
@@ -241,6 +297,7 @@ export default Service.extend( /** @class VersioncheckService */ {
 		if ( this.state !== "downloading" || !this._downloadController ) { return; }
 		++this._downloadGeneration;
 		this._downloadController.abort();
+		this._recordHistory( "download", "cancelled", { update: this.release } );
 		setProperties( this, { state: "available", progress: 0, errorCode: "" } );
 	},
 	later() {
@@ -254,6 +311,7 @@ export default Service.extend( /** @class VersioncheckService */ {
 			if ( !this.model ) { await this._getRecord(); }
 			set( this.model, "skippedTag", this.release.tag );
 			await this.model.save();
+			this._recordHistory( "check", "skipped", { update: this.release } );
 			await this._discardPreparedUpdate();
 			setProperties( this, { release: null, state: "idle", errorCode: "" } );
 			this.later();
@@ -288,6 +346,7 @@ export default Service.extend( /** @class VersioncheckService */ {
 			return false;
 		}
 		setProperties( this, { state: "preparing", confirmingInstall: false, errorCode: "" } );
+		this._recordHistory( "install", "started", { update: this.release } );
 		try {
 			if ( !this._installJob ) {
 				const job = await installer.prepareUpdate({
@@ -295,6 +354,8 @@ export default Service.extend( /** @class VersioncheckService */ {
 					update: this.release,
 					installDir: this.installDir,
 					profileDir: dataPath,
+					storage: LS,
+					identity: this.currentBuild,
 					platform,
 					arch
 				});
@@ -312,9 +373,11 @@ export default Service.extend( /** @class VersioncheckService */ {
 					`--profile-directory=${basename( dataPath )}`
 				]
 			});
+			await this._historyTask;
 			quit();
 			return true;
 		} catch ( error ) {
+			this._recordHistory( "install", "failed", { update: this.release, code: error.code } );
 			const invalidArchive = [ "UPDATE_INTEGRITY", "UPDATE_ARCHIVE", "UPDATE_PACKAGE" ];
 			if ( invalidArchive.includes( error.code ) ) {
 				this._archivePath = null;
@@ -351,10 +414,85 @@ export default Service.extend( /** @class VersioncheckService */ {
 			.catch( error => this._fail( error ) );
 	},
 	async _confirmStartup() {
-		return installer.confirmStartup({
+		const confirmed = await installer.confirmStartup({
 			installDir: this.installDir,
 			identity: this.currentBuild
 		});
+		if ( confirmed ) {
+			if ( this.model && this.model.failedCommit === this.currentBuild.commit ) {
+				set( this.model, "failedCommit", "" );
+				await this.model.save();
+			}
+			this._recordHistory( "startup", "succeeded" );
+		}
+		return confirmed;
+	},
+	_recordHistory( type, status, { update, commit, code } = {} ) {
+		const identity = update ? update.manifest : this.currentBuild;
+		const event = {
+			type, status, at: Date.now(),
+			commit: commit || identity.commit
+		};
+		if ( event.commit === identity.commit ) {
+			event.version = update ? update.manifest.version : this.currentVersion;
+			event.buildNumber = identity.buildNumber;
+		}
+		if ( update ) { event.tag = update.tag; }
+		if ( code ) { event.code = code; }
+		this._historyTask = Promise.resolve( this._historyTask )
+			.then( () => history.appendHistory( this.historyFile, event ) )
+			.then( entries => {
+				if ( this.isDestroying || this.isDestroyed ) { return; }
+				set( this, "historyEntries", entries );
+			})
+			.catch( () => {
+				if ( this.isDestroying || this.isDestroyed ) { return; }
+				set( this, "historyError", "UPDATE_HISTORY" );
+			});
+		return this._historyTask;
+	},
+	async showHistory() {
+		if ( this.historyBusy ) { return false; }
+		setProperties( this, { historyBusy: true, historyError: "" } );
+		this.modal.openModal( "updater-history", this );
+		try {
+			await this._historyTask;
+			const entries = await history.readHistory( this.historyFile );
+			set( this, "historyEntries", entries );
+			return true;
+		} catch ( error ) {
+			set( this, "historyError", "UPDATE_HISTORY" );
+			return false;
+		} finally {
+			set( this, "historyBusy", false );
+		}
+	},
+	async exportDiagnostics( destination ) {
+		if ( !destination || this.diagnosticsBusy ) { return false; }
+		setProperties( this, {
+			diagnosticsBusy: true, diagnosticsSaved: false, historyError: ""
+		});
+		try {
+			await this._historyTask;
+			const entries = await history.readHistory( this.historyFile );
+			await history.exportDiagnostics( destination, {
+				history: entries,
+				currentBuild: {
+					version: this.currentVersion,
+					commit: this.currentBuild.commit,
+					buildNumber: this.currentBuild.buildNumber,
+					commitTime: this.currentBuild.commitTime
+				},
+				platform, arch
+			});
+			set( this, "diagnosticsSaved", true );
+			return true;
+		} catch ( error ) {
+			set( this, "historyError", "UPDATE_DIAGNOSTICS" );
+			return false;
+		} finally {
+			set( this, "diagnosticsBusy", false );
+		}
 	},
 	_getRecord() {
 		if ( this._recordPromise ) { return this._recordPromise; }

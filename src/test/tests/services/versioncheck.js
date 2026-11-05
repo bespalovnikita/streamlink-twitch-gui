@@ -9,7 +9,7 @@ import Service from "@ember/service";
 import { basename, dirname, join, resolve } from "path";
 
 // eslint-disable-next-line max-len
-import versioncheckServiceInjector from "inject-loader?metadata&nwjs/App&nwjs/argv&nwjs/debug&nwjs/process&utils/node/platform&updater/client&updater/install!services/versioncheck";
+import versioncheckServiceInjector from "inject-loader?metadata&nwjs/App&nwjs/argv&nwjs/debug&nwjs/process&utils/node/platform&updater/client&updater/install&updater/history&init/initializers/localstorage/localstorage!services/versioncheck";
 
 
 function deferred() {
@@ -49,6 +49,7 @@ module( "services/versioncheck", function( hooks ) {
 			releaseUrl: "https://github.com/bespalovnikita/streamlink-twitch-gui/releases/tag/test",
 			platform: "linux64",
 			manifest: {
+				version: "2.5.3",
 				commit: "2222222222222222222222222222222222222222",
 				buildNumber: 101,
 				commitTime: 1700000001
@@ -64,7 +65,8 @@ module( "services/versioncheck", function( hooks ) {
 			version: "2.5.3",
 			checkagain: Date.now() + 7 * 24 * 3600 * 1000,
 			showdebugmessage: 0,
-			skippedTag: ""
+			skippedTag: "",
+			failedCommit: ""
 		});
 		this.record.save = sinon.stub().resolves( this.record );
 		this.findRecord = sinon.stub().resolves( this.record );
@@ -81,11 +83,16 @@ module( "services/versioncheck", function( hooks ) {
 		this.downloadUpdate = sinon.stub().resolves( this.archivePath );
 		this.job = { token: "test-token", jobFile: join( this.cacheDir, "job.json" ) };
 		this.prepareUpdate = sinon.stub().resolves( this.job );
+		this.checkUpdateSpace = sinon.stub().resolves();
 		this.startInstall = sinon.stub().resolves();
 		this.confirmStartup = sinon.stub().resolves( false );
 		this.readRollbackStatus = sinon.stub().resolves( null );
+		this.readHistory = sinon.stub().resolves( [] );
+		this.appendHistory = sinon.stub().resolves( [] );
+		this.exportDiagnostics = sinon.stub().resolves();
 		this.quit = sinon.spy();
 		this.settingsModel = EmberObject.create({ isDirty: false });
+		this.localStorage = {};
 		this.process = {
 			execPath: join( this.installDir, "streamlink-twitch-gui" ),
 			pid: 12345,
@@ -125,11 +132,18 @@ module( "services/versioncheck", function( hooks ) {
 				downloadUpdate: this.downloadUpdate
 			},
 			"updater/install": {
+				checkUpdateSpace: this.checkUpdateSpace,
 				prepareUpdate: this.prepareUpdate,
 				startInstall: this.startInstall,
 				confirmStartup: this.confirmStartup,
 				readRollbackStatus: this.readRollbackStatus
-			}
+			},
+			"updater/history": {
+				readHistory: this.readHistory,
+				appendHistory: this.appendHistory,
+				exportDiagnostics: this.exportDiagnostics
+			},
+			"init/initializers/localstorage/localstorage": this.localStorage
 		});
 		this.owner.register( "service:versioncheck", VersioncheckService );
 		this.owner.register( "service:store", Service.extend({
@@ -197,6 +211,33 @@ module( "services/versioncheck", function( hooks ) {
 		assert.strictEqual( updater.release, this.release, "Keeps the offered release" );
 		assert.strictEqual( updater.state, "available", "Manual check offers a skipped tag" );
 		assert.ok( this.openModal.calledWith( "newrelease", updater ), "Shows the update offer" );
+	});
+
+	test( "Failed builds require a manual retry", async function( assert ) {
+		this.record.set( "failedCommit", this.release.manifest.commit );
+		this.checkForUpdate.resolves( this.release );
+		const updater = this.getUpdater();
+		await updater.check();
+		assert.strictEqual( updater.state, "blocked", "Quarantines the build that rolled back" );
+		assert.notOk( updater.release, "Does not offer the failed build at startup" );
+		assert.notOk( this.openModal.called, "Does not repeatedly interrupt startup" );
+		await updater.checkNow();
+		assert.strictEqual( updater.state, "available", "Explicit checking can offer a retry" );
+		assert.strictEqual( updater.release, this.release, "Uses the checked release metadata" );
+		assert.ok( updater.hasFailedRelease, "Marks the failed build for a warning" );
+	});
+
+	test( "Downloading clears Skip and preserves quarantine", async function( assert ) {
+		this.record.setProperties({
+			skippedTag: this.release.tag,
+			failedCommit: this.release.manifest.commit
+		});
+		const updater = await this.readyUpdate();
+		assert.strictEqual( updater.state, "ready", "A manual retry can download the build" );
+		assert.strictEqual( this.record.skippedTag, "", "Removes the skip after download" );
+		assert.strictEqual( this.record.failedCommit, this.release.manifest.commit,
+			"Keeps failed-build protection until a healthy startup is confirmed" );
+		assert.ok( this.record.save.calledOnce, "Persists the cleared skip" );
 	});
 
 	test( "Skip persists the tag while Later only dismisses the offer", async function( assert ) {
@@ -364,6 +405,116 @@ module( "services/versioncheck", function( hooks ) {
 		assert.notOk( this.quit.called, "Leaves the current build running" );
 	});
 
+	test( "Insufficient disk space prevents downloading or staging", async function( assert ) {
+		this.checkUpdateSpace.rejects( Object.assign( new Error( "Insufficient disk space" ), {
+			code: "UPDATE_NO_SPACE"
+		}) );
+		this.checkForUpdate.resolves( this.release );
+		const updater = this.getUpdater();
+		await updater.checkNow();
+		await updater.download();
+		assert.ok( this.checkUpdateSpace.calledOnce, "Checks free space before downloading" );
+		const request = this.checkUpdateSpace.firstCall.args[0];
+		assert.strictEqual( request.update, this.release, "Checks the selected archive" );
+		assert.strictEqual( request.installDir, this.installDir, "Checks the installation disk" );
+		assert.strictEqual( request.profileDir, this.profileDir, "Checks the preserved profile" );
+		assert.strictEqual( request.downloadPath, join( this.cacheDir, "updates",
+			this.release.manifest.commit, this.release.asset.name ), "Checks the download disk" );
+		assert.strictEqual( updater.errorCode, "UPDATE_NO_SPACE", "Explains the space shortage" );
+		assert.notOk( this.downloadUpdate.called, "Does not start an archive download" );
+		assert.notOk( this.prepareUpdate.called, "Does not create a staging directory" );
+		assert.notOk( this.quit.called, "Leaves the current build running" );
+	});
+
+	test( "History persistence failures do not block installation", async function( assert ) {
+		this.appendHistory.rejects( Object.assign( new Error( "History not writable" ), {
+			code: "EACCES"
+		}) );
+		const updater = await this.readyUpdate();
+		await updater.requestInstall();
+		assert.ok( this.appendHistory.called, "Attempts to record updater activity" );
+		assert.ok( this.prepareUpdate.calledOnce, "Still prepares the verified archive" );
+		assert.ok( this.startInstall.calledOnce, "Still starts the independent helper" );
+		assert.ok( this.quit.calledOnce, "Still installs the requested update" );
+		assert.notOk( updater.errorCode, "History errors do not replace the updater result" );
+	});
+
+	test( "History opens after loading updater events from the profile", async function( assert ) {
+		const events = [{ time: "2026-11-05T12:00:00Z", state: "ready", code: "" }];
+		const loaded = deferred();
+		this.readHistory.returns( loaded.promise );
+		const updater = this.getUpdater();
+		const opening = updater.showHistory();
+		assert.ok( updater.historyBusy, "Shows the loading state" );
+		await Promise.resolve();
+		const filename = join( this.profileDir, "updater-history.json" );
+		assert.ok( this.readHistory.calledWithExactly( filename ),
+			"Reads only this profile's updater history" );
+		loaded.resolve( events );
+		await opening;
+		assert.deepEqual( updater.historyEntries, events, "Shows the stored events" );
+		assert.notOk( updater.historyBusy, "Finishes loading" );
+		assert.ok( this.openModal.calledWith( "updater-history", updater ), "Opens history" );
+	});
+
+	test( "History load failure leaves the application usable", async function( assert ) {
+		this.readHistory.rejects( new Error( "History unavailable" ) );
+		const updater = this.getUpdater();
+		await updater.showHistory();
+		assert.ok( updater.historyError, "Reports that history could not be loaded" );
+		assert.notOk( updater.historyBusy, "Unlocks the history controls" );
+		assert.strictEqual( updater.state, "idle", "Does not change the updater result" );
+		assert.notOk( this.quit.called, "Does not restart the app" );
+	});
+
+	test( "Diagnostics exports only history and public build identity", async function( assert ) {
+		const destination = join( this.cacheDir, "diagnostics.json" );
+		const events = [{ time: "2026-11-05T12:00:00Z", state: "ready", code: "" }];
+		this.readHistory.resolves( events );
+		this.release.privateInfo = "private-release-marker";
+		this.job.privateInfo = "private-job-marker";
+		const updater = await this.readyUpdate();
+		await updater.exportDiagnostics( destination );
+		assert.ok( this.exportDiagnostics.calledOnce, "Writes the explicitly selected file" );
+		const [ filename, payload ] = this.exportDiagnostics.firstCall.args;
+		assert.strictEqual( filename, destination, "Uses the requested destination" );
+		assert.strictEqual( payload.currentBuild.commit, this.currentBuild.commit,
+			"Includes the running commit" );
+		assert.strictEqual( payload.currentBuild.buildNumber, this.currentBuild.buildNumber,
+			"Includes the CI build number" );
+		assert.strictEqual( payload.currentBuild.commitTime, this.currentBuild.commitTime,
+			"Includes the commit time" );
+		assert.ok( payload.currentBuild.version, "Includes the public version" );
+		assert.ok( Object.keys( payload.currentBuild ).every( key =>
+			[ "version", "commit", "buildNumber", "commitTime" ].includes( key ) ),
+		"Build identity contains only allowed fields" );
+		assert.strictEqual( payload.platform, "linux", "Includes the platform" );
+		assert.strictEqual( payload.arch, "x64", "Includes the architecture" );
+		assert.notOk( JSON.stringify( payload ).includes( "private-release-marker" ),
+			"Does not pass raw release metadata" );
+		assert.notOk( JSON.stringify( payload ).includes( "private-job-marker" ),
+			"Does not pass the installation job" );
+		assert.notOk( JSON.stringify( payload ).includes( this.profileDir ),
+			"Does not include the user's profile path" );
+		assert.ok( updater.diagnosticsSaved, "Reports successful export" );
+		assert.notOk( updater.diagnosticsBusy, "Unlocks export controls" );
+	});
+
+	test( "Diagnostics export can be retried after failure", async function( assert ) {
+		const destination = join( this.cacheDir, "diagnostics.json" );
+		this.exportDiagnostics.rejects( new Error( "Destination unavailable" ) );
+		const updater = this.getUpdater();
+		await updater.exportDiagnostics( destination );
+		assert.ok( updater.historyError, "Reports an export failure" );
+		assert.notOk( updater.diagnosticsSaved, "Does not claim that a failed export succeeded" );
+		assert.notOk( updater.diagnosticsBusy, "Unlocks export controls after failure" );
+		assert.strictEqual( updater.state, "idle", "Preserves the updater state" );
+		this.exportDiagnostics.resolves();
+		await updater.exportDiagnostics( destination );
+		assert.ok( updater.diagnosticsSaved, "Can retry exporting" );
+		assert.notOk( updater.historyError, "Clears the export failure after success" );
+	});
+
 	test( "Active streams require a separate restart confirmation", async function( assert ) {
 		const updater = await this.readyUpdate();
 		set( this.owner.lookup( "service:streaming" ), "hasStreams", true );
@@ -436,7 +587,9 @@ module( "services/versioncheck", function( hooks ) {
 			installDir: this.installDir,
 			profileDir: this.profileDir,
 			platform: "linux",
-			arch: "x64"
+			arch: "x64",
+			storage: this.localStorage,
+			identity: this.currentBuild
 		}, "Keeps the profile separate from the installation" );
 		assert.ok( this.startInstall.calledWith( this.job ), "Launches the prepared job" );
 		assert.strictEqual( this.startInstall.firstCall.args[1].parentPid, 12345, "Parent PID" );
@@ -508,14 +661,47 @@ module( "services/versioncheck", function( hooks ) {
 	});
 
 	test( "Startup reports rollback before offering another update", async function( assert ) {
-		this.readRollbackStatus.resolves({ state: "rolled-back", code: "UPDATE_STARTUP" });
+		this.readRollbackStatus.resolves({
+			state: "rolled-back",
+			code: "UPDATE_STARTUP",
+			commit: this.release.manifest.commit
+		});
 		const updater = this.getUpdater();
 		await updater.check();
 		assert.strictEqual( updater.state, "error", "Shows the rollback result" );
 		assert.strictEqual( updater.errorCode, "UPDATE_ROLLBACK", "Explains the restored backup" );
+		assert.strictEqual( this.record.failedCommit, this.release.manifest.commit,
+			"Remembers the failed commit before offering any further update" );
+		assert.ok( this.record.save.calledOnce, "Persists failed-build quarantine" );
 		assert.ok( this.openModal.calledWith( "newrelease", updater ), "Opens rollback notice" );
 		assert.notOk( this.checkForUpdate.called, "Keeps the rollback notice visible" );
 		assert.notOk( this.quit.called, "Keeps the restored application running" );
+		await updater._historyTask;
+		const event = this.appendHistory.lastCall.args[1];
+		assert.strictEqual( event.commit, this.release.manifest.commit,
+			"Records the failed target commit" );
+		assert.notOk( Object.prototype.hasOwnProperty.call( event, "buildNumber" ),
+			"Does not associate the restored build number with the failed target" );
+		assert.notOk( Object.prototype.hasOwnProperty.call( event, "version" ),
+			"Does not associate the restored version with the failed target" );
+	});
+
+	test( "Healthy startup clears matching quarantine", async function( assert ) {
+		const updater = this.getUpdater();
+		await updater._getRecord();
+		this.record.set( "failedCommit", this.currentBuild.commit );
+		await updater._confirmStartup();
+		assert.strictEqual( this.record.failedCommit, this.currentBuild.commit,
+			"An unconfirmed startup cannot clear quarantine" );
+		this.confirmStartup.resolves( true );
+		this.record.set( "failedCommit", this.release.manifest.commit );
+		await updater._confirmStartup();
+		assert.strictEqual( this.record.failedCommit, this.release.manifest.commit,
+			"A healthy different build cannot clear quarantine" );
+		this.record.set( "failedCommit", this.currentBuild.commit );
+		await updater._confirmStartup();
+		assert.strictEqual( this.record.failedCommit, "", "Clears the confirmed running commit" );
+		assert.ok( this.record.save.calledOnce, "Persists only the matching recovery" );
 	});
 
 	test( "First run still creates a record and waits for onboarding", async function( assert ) {

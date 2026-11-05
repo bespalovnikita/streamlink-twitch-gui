@@ -11,6 +11,7 @@ import Service from "@ember/service";
 
 import UpdateStatusComponent from "ui/components/update-status/component";
 import ModalNewreleaseComponent from "ui/components/modal/modal-newrelease/component";
+import ModalUpdaterHistoryComponent from "ui/components/modal/modal-updater-history/component";
 import ModalHeaderComponent from "ui/components/modal/modal-header/component";
 import ModalBodyComponent from "ui/components/modal/modal-body/component";
 import ModalFooterComponent from "ui/components/modal/modal-footer/component";
@@ -22,6 +23,7 @@ module( "ui/components/update-status", function( hooks ) {
 		resolver: buildResolver({
 			UpdateStatusComponent,
 			ModalNewreleaseComponent,
+			ModalUpdaterHistoryComponent,
 			ModalHeaderComponent,
 			ModalBodyComponent,
 			ModalFooterComponent,
@@ -46,6 +48,8 @@ module( "ui/components/update-status", function( hooks ) {
 		this.install = sinon.spy();
 		this.later = sinon.spy();
 		this.ignoreRelease = sinon.spy();
+		this.showHistory = sinon.spy();
+		this.exportDiagnostics = sinon.spy();
 
 		this.owner.register( "service:versioncheck", Service.extend({
 			currentVersion: "2.5.3",
@@ -62,13 +66,21 @@ module( "ui/components/update-status", function( hooks ) {
 			confirmingInstall: false,
 			hasStreams: false,
 			hasUnsavedSettings: false,
+			hasFailedRelease: false,
+			historyEntries: [],
+			historyBusy: false,
+			historyErrorKey: "",
+			diagnosticsBusy: false,
+			diagnosticsSaved: false,
 			checkNow: this.checkNow,
 			download: this.download,
 			cancelDownload: this.cancelDownload,
 			requestInstall: this.requestInstall,
 			install: this.install,
 			later: this.later,
-			ignoreRelease: this.ignoreRelease
+			ignoreRelease: this.ignoreRelease,
+			showHistory: this.showHistory,
+			exportDiagnostics: this.exportDiagnostics
 		}) );
 		this.set( "updater", this.owner.lookup( "service:versioncheck" ) );
 	});
@@ -81,11 +93,16 @@ module( "ui/components/update-status", function( hooks ) {
 			"updater.current-version{\"version\":\"2.5.3\"}", "Shows the installed version" );
 		assert.ok( this.element.querySelector( ".updater-current-commit" ), "Shows the commit" );
 		assert.ok( this.element.querySelector( ".updater-download" ), "Offers downloading" );
+		assert.ok( this.element.querySelector( ".updater-history" ), "Offers update history" );
+		assert.ok( this.element.querySelector( ".updater-export" ), "Offers saving diagnostics" );
 		assert.notOk( this.element.querySelector( ".updater-restart" ),
 			"Restart is unavailable until the archive is ready" );
 
 		await click( ".updater-check" );
 		assert.ok( this.checkNow.calledOnce, "Checks immediately without a settings Apply action" );
+		await click( ".updater-history" );
+		assert.ok( this.showHistory.calledOnce, "Delegates history loading to the updater" );
+		assert.notOk( this.exportDiagnostics.called, "Does not export without a selected file" );
 		await click( ".updater-download" );
 		assert.ok( this.download.calledOnce, "Download starts only through the download action" );
 
@@ -166,5 +183,50 @@ module( "ui/components/update-status", function( hooks ) {
 		await click( ".updater-back" );
 		assert.ok( this.later.calledOnce, "Returns without installing" );
 		assert.ok( this.install.calledOnce, "Unsaved settings cannot start installation" );
+	});
+
+	test( "Notes remain plain text and failed builds have a warning", async function( assert ) {
+		const notes = "Changes <img src=x onerror=alert(1)> & <script>alert(2)</script>";
+		this.updater.setProperties({
+			release: { versionLabel: "2.5.3 (22222222)", releaseNotes: notes },
+			hasFailedRelease: true
+		});
+		await render( hbs`{{modal-newrelease modalContext=updater}}` );
+		const renderedNotes = this.element.querySelector( ".updater-release-notes" );
+		assert.ok( renderedNotes, "Shows release notes" );
+		assert.strictEqual( renderedNotes.textContent, notes, "Preserves notes as literal text" );
+		assert.notOk( renderedNotes.querySelector( "img, script" ), "Does not interpret HTML" );
+		assert.ok( this.element.querySelector( ".updater-failed-warning" ),
+			"Warns before retrying a build that failed previously" );
+		assert.notOk( this.element.querySelector( ".updater-history, .updater-export" ),
+			"Keeps history and diagnostics in General settings" );
+		assert.notOk( this.element.querySelector( "input[nwsaveas]" ),
+			"The update offer does not create a native file chooser" );
+	});
+
+	test( "History uses localized labels and short commits", async function( assert ) {
+		this.owner.lookup( "service:intl" ).addTranslations( "en", {
+			"updater.history.type.download": "Download",
+			"updater.history.status.succeeded": "Completed"
+		});
+		this.updater.set( "historyEntries", [{
+			at: 1700000000000,
+			type: "download",
+			status: "succeeded",
+			commit: "2222222222222222222222222222222222222222",
+			code: "UPDATE_ARCHIVE"
+		}] );
+		await render( hbs`{{modal-updater-history modalContext=updater}}` );
+		const entry = this.element.querySelector( ".updater-history-entry" );
+		assert.ok( entry, "Renders the recorded event" );
+		assert.ok( entry.textContent.includes( "Download: Completed" ),
+			"Translates the event type and status" );
+		assert.ok( entry.textContent.includes( "\"commit\":\"22222222\"" ),
+			"Shows the abbreviated commit" );
+		assert.notOk( entry.textContent.includes( "2222222222222222222222222222222222222222" ),
+			"Does not show an unnecessarily long commit" );
+		assert.strictEqual( entry.querySelector( "code" ).textContent, "UPDATE_ARCHIVE",
+			"Shows the safe diagnostic code" );
+		assert.ok( entry.querySelector( "time" ).textContent, "Shows the event date" );
 	});
 });

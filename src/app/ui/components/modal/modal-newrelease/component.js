@@ -1,5 +1,6 @@
 import ModalDialogComponent from "../modal-dialog/component";
 import layout from "./template.hbs";
+import "./styles.less";
 
 
 export default ModalDialogComponent.extend( /** @class ModalNewreleaseComponent */ {

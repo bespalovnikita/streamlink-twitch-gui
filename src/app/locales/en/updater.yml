@@ -14,6 +14,7 @@ status:
     installing: Restarting to install the update…
     error: The update could not be completed.
     unsupported: Automatic updates are not available for this build.
+    blocked: A previous attempt to install this build failed. Check manually to try it again.
 action:
     check: Check for updates
     download: Download update
@@ -23,9 +24,39 @@ action:
     restart: Restart and install
     confirm-restart: Restart anyway
     back: Back
+    history: Update history
+    export: Save diagnostics…
 warning:
     streams: Open streams may close when the application restarts. Restart and install the update?
     settings: Save or discard changes in Settings and wait for any save to finish before restarting.
+    failed-release: This build failed to start after a previous update. Your previous version was restored. You can explicitly download and try installing it again.
+notes:
+    title: Changes in this version
+    empty: No release notes were provided for this build.
+history:
+    title: Update history
+    description: The last 50 update events are stored locally. Diagnostics include build information and error codes without settings, sign-in data, or file paths.
+    loading: Loading update history…
+    empty: No update events have been recorded yet.
+    error: Could not read or save update history. Application updates are still available.
+    exported: Diagnostics saved.
+    export-error: Could not save diagnostics. Choose another file and try again.
+    commit: "Build: {commit}"
+    type:
+        check: Update check
+        download: Download
+        install: Installation
+        startup: Application startup
+        rollback: Restore previous version
+    status:
+        started: Started
+        available: Update available
+        current: Latest build installed
+        succeeded: Completed
+        failed: Failed
+        cancelled: Cancelled
+        skipped: Skipped
+        blocked: Automatic retry disabled
 error:
     rollback: The update could not be completed. The previous application version has been restored; your settings have been preserved.
     generic: Could not update the application. Please try again.
@@ -39,4 +70,7 @@ error:
     busy: An update is already in progress. Wait for it to finish.
     start: Could not start the update installer. Please try again.
     settings: Save or discard settings changes and wait for any save to finish before installing the update.
+    space: There is not enough free space to download and safely install this update, including a backup. Free some space and try again.
+    profile: Could not back up or restore application settings safely. The update was stopped to preserve your data.
+    signature: The update signature could not be verified. The update was stopped; try checking again later.
 progress: "Downloaded: {percent}%"

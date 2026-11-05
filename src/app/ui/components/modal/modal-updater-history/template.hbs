@@ -1,0 +1,28 @@
+<div>
+	{{#modal-header}}{{t "updater.history.title"}}{{/modal-header}}
+	{{#modal-body}}
+		<p>{{t "updater.history.description"}}</p>
+		{{#if modalContext.historyBusy}}
+			<p role="status">{{t "updater.history.loading"}}</p>
+		{{else}}
+			{{#if modalContext.historyErrorKey}}
+				<p class="text-danger" role="alert">{{t modalContext.historyErrorKey}}</p>
+			{{/if}}
+			<ul class="list-unstyled updater-history-list">
+				{{#each entries as |entry|}}
+					<li class="updater-history-entry">
+						<time>{{entry.date}}</time>
+						<span>{{t entry.typeKey}}: {{t entry.statusKey}}</span>
+						{{#if entry.commit}}<span>{{t "updater.history.commit" commit=entry.commit}}</span>{{/if}}
+						{{#if entry.code}}<code>{{entry.code}}</code>{{/if}}
+					</li>
+				{{else}}
+					<li>{{t "updater.history.empty"}}</li>
+				{{/each}}
+			</ul>
+		{{/if}}
+	{{/modal-body}}
+	{{#modal-footer}}
+		{{#form-button action=(action "close") classNames="btn-default"}}{{t "updater.action.back"}}{{/form-button}}
+	{{/modal-footer}}
+</div>

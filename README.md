@@ -1,5 +1,7 @@
 [Streamlink Twitch GUI][Website]
 ===
+
+[Документация на русском](README.ru.md) · [Инструкции для агентов](AGENTS.md)
 [![Supported platforms][badge-platforms]][Releases] [![Latest release][badge-release]][Releases] [![Open issues][badge-issues]][Issues] [![Gitter IRC][badge-gitter]][Gitter] [![Build status][badge-actions]][Github-actions] [![Code coverage][badge-codecov]][Codecov]
 
 > [!IMPORTANT]

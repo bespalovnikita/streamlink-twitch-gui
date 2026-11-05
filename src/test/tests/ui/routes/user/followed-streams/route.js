@@ -57,8 +57,7 @@ module( "ui/routes/user/followed-streams/route", function( hooks ) {
 		this.route = this.owner.lookup( "route:user.followed-streams" );
 		this.records = [];
 		this.query = sinon.stub().callsFake( async () => this.records );
-		this.route.store = this.owner.lookup( "service:store" );
-		this.route.store.query = this.query;
+		this.owner.lookup( "service:store" ).query = this.query;
 		sinon.stub( this.route, "calcFetchSize" ).returns( 2 );
 		sinon.stub( this.route, "preload" ).returnsArg( 0 );
 		sinon.stub( this.route, "modelItemLoader" ).resolves();

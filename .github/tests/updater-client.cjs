@@ -6,7 +6,9 @@ const { createHash, generateKeyPairSync, sign } = require( "node:crypto" );
 const fs = require( "node:fs" );
 const os = require( "node:os" );
 const path = require( "node:path" );
-const { checkForUpdate, downloadUpdate: downloadClient } = require( "../../src/app/updater/client" );
+const {
+	checkForUpdate, downloadUpdate: downloadClient
+} = require( "../../src/app/updater/client" );
 
 
 const repository = "example/streamlink-twitch-gui";
@@ -216,7 +218,7 @@ test( "The same commit never updates itself, even after a rebuild", async () => 
 	const item = fixture( { ...currentBuild, buildNumber: 999 } );
 	const fake = discovery( [ item ] );
 	assert.equal( await checkForUpdate( options( fake.request ) ), null );
-	assert.equal( fake.calls.length, 3, "Verifies signatures even for an already installed commit" );
+	assert.equal( fake.calls.length, 3, "Verifies the signature of an installed commit" );
 });
 
 test( "An already installed commit cannot bypass signature checks", async () => {
@@ -300,7 +302,9 @@ test( "Rejects oversized manifest and signature descriptors before downloading t
 		const item = fixture();
 		item.release.assets.find( asset => asset.name === name ).size = size;
 		const fake = discovery( [ item ] );
-		await assert.rejects( checkForUpdate( options( fake.request ) ), { code: "INVALID_RELEASE" } );
+		await assert.rejects(
+			checkForUpdate( options( fake.request ) ), { code: "INVALID_RELEASE" }
+		);
 		assert.equal( fake.calls.some( call => call.url === assetUrl( item.tag, name ) ), false );
 	}
 });
@@ -309,7 +313,8 @@ test( "Allows a second explicitly pinned Ed25519 key for rotation", async () => 
 	const item = fixture();
 	const rotation = generateKeyPairSync( "ed25519" );
 	item.signature.keyId = "next-key";
-	item.signature.signatureBase64 = sign( null, item.body, rotation.privateKey ).toString( "base64" );
+	item.signature.signatureBase64 = sign( null, item.body, rotation.privateKey )
+		.toString( "base64" );
 	item.signatureBody = Buffer.from( JSON.stringify( item.signature ) );
 	item.release.assets.find( asset => asset.name === "update.json.sig" ).size
 		= item.signatureBody.length;
@@ -481,7 +486,7 @@ test( "Downloads, verifies and atomically caches an archive with progress", asyn
 	} ), filename );
 });
 
-test( "Download rejects unsigned or mutated descriptors before touching disk or network", async context => {
+test( "Download rejects unverified descriptors before writing or requesting", async context => {
 	for ( const mutate of [
 		update => { delete update.manifestSignature; },
 		update => { update.manifestBytes[0] ^= 1; },

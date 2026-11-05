@@ -85,6 +85,7 @@ module( "services/versioncheck", function( hooks ) {
 		this.prepareUpdate = sinon.stub().resolves( this.job );
 		this.checkUpdateSpace = sinon.stub().resolves();
 		this.startInstall = sinon.stub().resolves();
+		this.discardUpdate = sinon.stub().resolves( true );
 		this.confirmStartup = sinon.stub().resolves( false );
 		this.readRollbackStatus = sinon.stub().resolves( null );
 		this.readHistory = sinon.stub().resolves( [] );
@@ -135,6 +136,7 @@ module( "services/versioncheck", function( hooks ) {
 				checkUpdateSpace: this.checkUpdateSpace,
 				prepareUpdate: this.prepareUpdate,
 				startInstall: this.startInstall,
+				discardUpdate: this.discardUpdate,
 				confirmStartup: this.confirmStartup,
 				readRollbackStatus: this.readRollbackStatus
 			},
@@ -612,6 +614,53 @@ module( "services/versioncheck", function( hooks ) {
 		assert.notOk( this.quit.called, "Does not quit without an installer" );
 		assert.ok( updater.errorCode, "Shows a useful failure status" );
 		assert.notOk( updater.isBusy, "Unlocks the controls after failure" );
+	});
+
+	test( "Helper retry prepares a fresh settings snapshot", async function( assert ) {
+		const snapshots = [];
+		const secondJob = {
+			token: "second-token",
+			jobFile: join( this.cacheDir, "retry-job.json" )
+		};
+		this.localStorage.testValue = "before failure";
+		this.prepareUpdate.callsFake( options => {
+			snapshots.push({ ...options.storage });
+			return Promise.resolve( snapshots.length === 1 ? this.job : secondJob );
+		});
+		this.startInstall.onFirstCall().rejects( Object.assign( new Error( "Helper unavailable" ), {
+			code: "UPDATE_START"
+		}) );
+		const updater = await this.readyUpdate();
+		await updater.requestInstall();
+		assert.ok( this.discardUpdate.calledOnceWithExactly( this.job ),
+			"Discards a prepared job after its helper failed to start" );
+		assert.strictEqual( updater.state, "ready", "Keeps the verified archive available" );
+		assert.notOk( this.quit.called, "Keeps the application running after failure" );
+		this.localStorage.testValue = "changed after failure";
+		await updater.requestInstall();
+		assert.ok( this.prepareUpdate.calledTwice, "Prepares a new job for the explicit retry" );
+		assert.deepEqual( snapshots.map( snapshot => snapshot.testValue ),
+			[ "before failure", "changed after failure" ], "Snapshots the current settings" );
+		assert.strictEqual( this.prepareUpdate.secondCall.args[0].archivePath, this.archivePath,
+			"Reuses the verified download" );
+		assert.strictEqual( this.startInstall.secondCall.args[0], secondJob, "Uses the new job" );
+		assert.ok( this.quit.calledOnce, "Quits only after the retry helper starts" );
+	});
+
+	test( "A guarded prepared job is retained when discard is refused", async function( assert ) {
+		this.discardUpdate.resolves( false );
+		this.startInstall.onFirstCall().rejects( Object.assign( new Error( "Helper uncertain" ), {
+			code: "UPDATE_START"
+		}) );
+		const updater = await this.readyUpdate();
+		await updater.requestInstall();
+		assert.ok( this.discardUpdate.calledOnceWithExactly( this.job ),
+			"Checks whether the previous prepared job can be removed" );
+		await updater.requestInstall();
+		assert.ok( this.prepareUpdate.calledOnce, "Does not replace a guarded job" );
+		assert.strictEqual( this.startInstall.secondCall.args[0], this.job,
+			"Keeps retries attached to the guarded job" );
+		assert.ok( this.quit.calledOnce, "Quits only after a helper successfully starts" );
 	});
 
 	test( "Saving a skipped tag blocks a concurrent restart", async function( assert ) {

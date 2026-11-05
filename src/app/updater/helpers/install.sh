@@ -11,7 +11,8 @@ token="$6"
 parent_pid="$7"
 timeout_ms="$8"
 rename_timeout_ms="$9"
-shift 9
+profile_dir="${10}"
+shift 10
 launch_args=("$@")
 app_name=streamlink-twitch-gui
 ready_file="$job_dir/ready"
@@ -22,14 +23,22 @@ swapped=0
 old_moved=0
 parent_exited=0
 done_install=0
+failure_code=UPDATE_START
 
 status() {
   printf '{"state":"%s","code":"%s"}\n' "$1" "$2" > "$status_file"
 }
 
 launch_old() {
+  local marker="$profile_dir/updater-backups/pending-restore"
+  local marker_tmp
+  marker_tmp="$(mktemp "$profile_dir/updater-backups/.restore-XXXXXX")" || return 1
+  printf '%s\0%s' "$job_file" "$token" > "$marker_tmp"
+  mv -T -- "$marker_tmp" "$marker" || return 1
+  status rolled-back "$failure_code"
   (cd "$install_dir" && env -u STGUI_UPDATE_JOB -u STGUI_UPDATE_TOKEN \
     STGUI_UPDATE_ROLLBACK="$job_file" \
+    STGUI_UPDATE_RESTORE_JOB="$job_file" STGUI_UPDATE_RESTORE_TOKEN="$token" \
     setsid "$install_dir/$app_name" "${launch_args[@]}" \
     < /dev/null >> "$job_dir/rollback.log" 2>&1) &
 }
@@ -51,16 +60,14 @@ rollback() {
       }
     fi
     if mv -T -- "$backup_dir" "$install_dir"; then
-      status rolled-back UPDATE_INSTALL
-      launch_old
+      launch_old || status failed UPDATE_PROFILE_BACKUP
     else
       status failed UPDATE_ROLLBACK
     fi
   elif [ "$parent_exited" = 1 ] && [ -x "$install_dir/$app_name" ]; then
-    status rolled-back UPDATE_INSTALL
-    launch_old
+    launch_old || status failed UPDATE_PROFILE_BACKUP
   else
-    status failed UPDATE_INSTALL
+    status failed "$failure_code"
   fi
   exit "${result:-1}"
 }
@@ -71,6 +78,7 @@ case "$parent_pid:$timeout_ms:$rename_timeout_ms" in *[!0-9:]*) exit 1;; esac
 [ "$parent_pid" -gt 1 ] && [ "$parent_pid" != "$$" ] || exit 1
 [ "$timeout_ms" -ge 100 ] && [ "$timeout_ms" -le 300000 ] || exit 1
 [ "$rename_timeout_ms" -ge 100 ] && [ "$rename_timeout_ms" -le 60000 ] || exit 1
+case "$profile_dir" in /*) ;; *) exit 1;; esac
 [ -d "$install_dir" ] && [ -d "$stage_dir" ] && [ -d "$job_dir" ] || exit 1
 [ ! -e "$backup_dir" ] && [ -f "$job_file" ] || exit 1
 parent_dir="$(dirname -- "$install_dir")"
@@ -102,10 +110,12 @@ mv -T -- "$stage_dir" "$install_dir"
 swapped=1
 
 (cd "$install_dir" && exec env -u STGUI_UPDATE_ROLLBACK \
+  -u STGUI_UPDATE_RESTORE_JOB -u STGUI_UPDATE_RESTORE_TOKEN \
   STGUI_UPDATE_JOB="$job_file" STGUI_UPDATE_TOKEN="$token" \
   setsid "$install_dir/$app_name" "${launch_args[@]}" \
   < /dev/null >> "$job_dir/startup.log" 2>&1) &
 new_pid=$!
+failure_code=UPDATE_ACK_TIMEOUT
 for ((attempt = 0; attempt < (timeout_ms + 99) / 100; attempt++)); do
   if [ -f "$ack_file" ] && [ "$(cat -- "$ack_file")" = "$token" ]; then
     done_install=1
@@ -113,7 +123,7 @@ for ((attempt = 0; attempt < (timeout_ms + 99) / 100; attempt++)); do
     rm -f -- "$job_dir/update.tar.gz"
     exit 0
   fi
-  if ! kill -0 "$new_pid" 2>/dev/null; then exit 1; fi
+  if ! kill -0 "$new_pid" 2>/dev/null; then failure_code=UPDATE_START; exit 1; fi
   sleep 0.1
 done
 exit 1

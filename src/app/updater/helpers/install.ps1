@@ -77,6 +77,7 @@ function Read-Job {
 		$data.args -isnot [Array] -or $data.args.Count -gt 100 -or
 		$data.parentPid -lt 0 -or $data.parentPid -gt [int]::MaxValue -or
 		$data.timeoutMs -lt 100 -or $data.timeoutMs -gt 600000 -or
+		$data.archiveUnpackedSize -le 0 -or $data.archiveUnpackedSize -gt 4294967296 -or
 		$data.archiveSize -le 0) {
 		Fail 'UPDATE_START' 'Invalid update parameters'
 	}
@@ -85,7 +86,7 @@ function Read-Job {
 			Fail 'UPDATE_START' 'Invalid application argument'
 		}
 	}
-	foreach ($key in @('installDir', 'jobDir', 'stageDir', 'backupDir', 'archivePath',
+	foreach ($key in @('installDir', 'profileDir', 'jobDir', 'stageDir', 'backupDir', 'archivePath',
 		'helperPath', 'launcherPath', 'jobFile', 'ackFile', 'readyFile', 'statusFile')) {
 		$data.$key = Canonical-Path $data.$key
 		Assert-NoReparse $data.$key
@@ -235,7 +236,8 @@ function Expand-Application {
 			}
 			if (-not $isDirectory) { [void]$files.Add($relative) }
 			$total += $entry.Length
-			if ($total -gt 4294967296 -or ($isDirectory -and $entry.Length -ne 0)) {
+			if ($total -gt 4294967296 -or $total -gt $script:job.archiveUnpackedSize -or
+				($isDirectory -and $entry.Length -ne 0)) {
 				Fail 'UPDATE_ARCHIVE' 'The archive exceeds the extraction limit'
 			}
 			$entries += @{ entry = $entry; relative = $relative; directory = $isDirectory }
@@ -467,11 +469,23 @@ function Launch-Application([bool]$Updating) {
 	[void]$start.EnvironmentVariables.Remove('STGUI_UPDATE_JOB')
 	[void]$start.EnvironmentVariables.Remove('STGUI_UPDATE_TOKEN')
 	[void]$start.EnvironmentVariables.Remove('STGUI_UPDATE_ROLLBACK')
+	[void]$start.EnvironmentVariables.Remove('STGUI_UPDATE_RESTORE_JOB')
+	[void]$start.EnvironmentVariables.Remove('STGUI_UPDATE_RESTORE_TOKEN')
 	if ($Updating) {
 		$start.EnvironmentVariables['STGUI_UPDATE_JOB'] = $script:job.jobFile
 		$start.EnvironmentVariables['STGUI_UPDATE_TOKEN'] = $script:job.token
 	} else {
 		$start.EnvironmentVariables['STGUI_UPDATE_ROLLBACK'] = $script:job.jobFile
+		if ($script:job.PSObject.Properties['profileBackupFile'] -and
+			$script:job.profileBackupFile) {
+			$root = Join-Path $script:job.profileDir 'updater-backups'
+			$marker = Join-Path $root 'pending-restore'
+			Assert-NoReparse $root
+			Assert-NoReparse $marker
+			Write-Text $marker ($script:job.jobFile + [char]0 + $script:job.token)
+			$start.EnvironmentVariables['STGUI_UPDATE_RESTORE_JOB'] = $script:job.jobFile
+			$start.EnvironmentVariables['STGUI_UPDATE_RESTORE_TOKEN'] = $script:job.token
+		}
 	}
 	return [Diagnostics.Process]::Start($start)
 }

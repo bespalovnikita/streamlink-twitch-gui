@@ -12,6 +12,7 @@ const updater = require( "../../src/app/updater/install.js" );
 
 const helpersDir = path.resolve( __dirname, "../../src/app/updater/helpers" );
 const modulePath = path.resolve( __dirname, "../../src/app/updater/install.js" );
+const profileModulePath = path.resolve( __dirname, "../../src/app/updater/profile-backup.js" );
 const supported = [ "linux", "win32" ].includes( process.platform );
 const isWindows = process.platform === "win32";
 const app = "streamlink-twitch-gui";
@@ -142,6 +143,25 @@ async function fixture( context, options = {} ) {
 	fs.writeFileSync( path.join( installDir, "build-info.json" ), json( { commit: oldCommit } ) );
 	fs.writeFileSync( path.join( profileDir, "settings.json" ), "fixture settings" );
 	fs.writeFileSync( path.join( profileDir, "auth.json" ), "fixture auth, no real credentials" );
+	const storageFile = path.join( profileDir, "app-storage.json" );
+	fs.writeFileSync( storageFile, json({ settings: "old-schema", auth: "fixture-auth",
+		external: "unmanaged-value" }) );
+	const storage = {
+		getItem( key ) {
+			const values = JSON.parse( fs.readFileSync( storageFile ) );
+			return Object.prototype.hasOwnProperty.call( values, key ) ? values[key] : null;
+		},
+		setItem( key, value ) {
+			const values = JSON.parse( fs.readFileSync( storageFile ) );
+			values[key] = value;
+			fs.writeFileSync( storageFile, json( values ) );
+		},
+		removeItem( key ) {
+			const values = JSON.parse( fs.readFileSync( storageFile ) );
+			delete values[key];
+			fs.writeFileSync( storageFile, json( values ) );
+		}
+	};
 	if ( options.real ) {
 		fs.copyFileSync( process.execPath, path.join( installDir, executable ) );
 		fs.chmodSync( path.join( installDir, executable ), 0o755 );
@@ -158,13 +178,17 @@ async function fixture( context, options = {} ) {
 		commit, buildNumber: 2, commitTime: "2026-11-05T12:00:00Z", version: "2.5.3",
 		platforms: { [platformKey]: {
 			name: path.basename( archivePath ), size: archive.length,
+			unpackedSize: isWindows
+				? entries.reduce( ( total, entry ) => total + ( entry.data || [] ).length, 0 )
+				: entries.reduce( ( total, entry ) => total + tarRecord( entry ).length, 1024 ),
 			sha256: createHash( "sha256" ).update( archive ).digest( "hex" )
 		} }
 	} };
 	context.after( () => fs.promises.rm( root, {
 		recursive: true, force: true, maxRetries: 30, retryDelay: 100
 	} ) );
-	return { root, installDir, profileDir, archivePath, update, helpersDir };
+	return { root, installDir, profileDir, archivePath, update, helpersDir, storage,
+		identity: { commit: oldCommit } };
 }
 
 function assertPreserved( current ) {
@@ -172,8 +196,9 @@ function assertPreserved( current ) {
 		"fixture settings" );
 	assert.equal( fs.readFileSync( path.join( current.profileDir, "auth.json" ), "utf8" ),
 		"fixture auth, no real credentials" );
-	assert.deepEqual( fs.readdirSync( current.profileDir ).sort(),
-		[ "auth.json", "settings.json" ] );
+	const contents = fs.readdirSync( current.profileDir )
+		.filter( name => name !== "updater-backups" ).sort();
+	assert.deepEqual( contents, [ "app-storage.json", "auth.json", "settings.json" ] );
 }
 
 async function waitFor( predicate, message, timeout = 15000 ) {
@@ -269,20 +294,49 @@ async function transaction( context, mode ) {
 const fs = require("node:fs");
 const path = require("node:path");
 const updater = require(${JSON.stringify( modulePath )});
+const backups = require(${JSON.stringify( profileModulePath )});
 const [mode, profile, eventFile] = process.argv.slice(2);
 const installDir = path.dirname(process.execPath);
 const identity = JSON.parse(fs.readFileSync(path.join(installDir, "build-info.json")));
+const storeFile = path.join(profile, "app-storage.json");
+const storage = {
+	getItem(key) { return JSON.parse(fs.readFileSync(storeFile))[key] || null; },
+	setItem(key, value) {
+		const values = JSON.parse(fs.readFileSync(storeFile));
+		values[key] = value;
+		fs.writeFileSync(storeFile, JSON.stringify(values));
+	},
+	removeItem(key) {
+		const values = JSON.parse(fs.readFileSync(storeFile));
+		delete values[key];
+		fs.writeFileSync(storeFile, JSON.stringify(values));
+	}
+};
 if (!process.env.STGUI_UPDATE_JOB) {
+	if (mode === "crash-manual") {
+		delete process.env.STGUI_UPDATE_RESTORE_JOB;
+		delete process.env.STGUI_UPDATE_RESTORE_TOKEN;
+		delete process.env.STGUI_UPDATE_ROLLBACK;
+	}
+	const restored = backups.applyPendingRestore({storage,
+		profileDir: profile, installDir, identity});
 	updater.readRollbackStatus({installDir}).then(rollback => {
-		fs.writeFileSync(eventFile, JSON.stringify({old: true, identity, rollback}));
+		fs.writeFileSync(eventFile, JSON.stringify({old: true, identity, rollback, restored,
+			settings: storage.getItem("settings"), auth: storage.getItem("auth")}));
 	});
-} else if (mode === "crash") {
+} else if (mode === "crash" || mode === "crash-manual") {
+	storage.setItem("settings", "unsupported-migrated-schema");
+	storage.setItem("auth", "migrated-fixture-auth");
 	process.exit(17);
 } else if (mode === "wrong-token") {
+	storage.setItem("settings", "unsupported-migrated-schema");
+	storage.setItem("auth", "migrated-fixture-auth");
 	const job = JSON.parse(fs.readFileSync(process.env.STGUI_UPDATE_JOB));
 	fs.writeFileSync(job.ackFile, "f".repeat(64));
 	setInterval(() => {}, 1000);
 } else if (mode === "timeout") {
+	storage.setItem("settings", "unsupported-migrated-schema");
+	storage.setItem("auth", "migrated-fixture-auth");
 	setInterval(() => {}, 1000);
 } else {
 	updater.confirmStartup({installDir, identity}).then(ack => {
@@ -379,14 +433,20 @@ test( "swaps the complete app after exit and accepts only a healthy new startup"
 	await pause( 300 );
 } );
 
-for ( const mode of [ "crash", "timeout", "wrong-token" ] ) {
+for ( const mode of [ "crash", "timeout", "wrong-token", "crash-manual" ] ) {
 	test( `restores and relaunches the old app after ${mode}`, {
 		skip: !supported, timeout: 45000
 	}, async context => {
 		const { current, status, event } = await transaction( context, mode );
 		assert.equal( status.state, "rolled-back" );
+		const code = mode.startsWith( "crash" ) ? "UPDATE_START" : "UPDATE_ACK_TIMEOUT";
+		assert.equal( status.code, code );
 		assert.equal( event.old, true );
 		assert.equal( event.rollback.state, "rolled-back" );
+		assert.equal( event.rollback.commit, commit );
+		assert.equal( Boolean( event.restored ), true );
+		assert.equal( event.settings, "old-schema", "Restore runs before old-app migrations" );
+		assert.equal( event.auth, "fixture-auth" );
 		assert.equal( event.identity.commit, oldCommit );
 		assert.equal( fs.existsSync( path.join( current.installDir, "new-file.txt" ) ), false );
 		assert.equal( fs.existsSync( path.join( current.installDir, "old-file.txt" ) ), true );
@@ -416,6 +476,22 @@ test( "rejects a checksum mismatch before creating a staged application", {
 	const expected = [ path.basename( current.archivePath ),
 		path.basename( current.installDir ), "profile" ];
 	assert.deepEqual( fs.readdirSync( current.root ).sort(), expected.sort() );
+	assertPreserved( current );
+} );
+
+test( "rejects an update before copying files when the volume has no free space", {
+	skip: !supported
+}, async context => {
+	const current = await fixture( context );
+	const original = fs.promises.statfs;
+	fs.promises.statfs = async () => ({ bavail: global.BigInt( 0 ), bsize: global.BigInt( 4096 ) });
+	try {
+		await assert.rejects( updater.prepareUpdate( current ), { code: "UPDATE_NO_SPACE" } );
+	} finally { fs.promises.statfs = original; }
+	const expected = [ path.basename( current.archivePath ),
+		path.basename( current.installDir ), "profile" ];
+	assert.deepEqual( fs.readdirSync( current.root ).sort(), expected.sort() );
+	assert.equal( fs.existsSync( path.join( current.profileDir, "updater-backups" ) ), false );
 	assertPreserved( current );
 } );
 
@@ -546,6 +622,19 @@ test( "rejects forged cleanup paths and never deletes an existing backup", {
 	assert.equal( fs.readFileSync( path.join( job.backupDir, "keep" ), "utf8" ), "backup" );
 	assertPreserved( current );
 	fs.rmSync( job.backupDir, { recursive: true } );
+	assert.equal( await updater.discardUpdate( job ), true );
+} );
+
+test( "rejects a modified profile backup before the current application exits", {
+	skip: !supported
+}, async context => {
+	const current = await fixture( context );
+	const job = await updater.prepareUpdate( current );
+	fs.appendFileSync( job.profileBackupFile, "\n" );
+	await assert.rejects( updater.startInstall( job ), { code: "UPDATE_PROFILE_BACKUP" } );
+	assert.equal( fs.existsSync( path.join( job.jobDir, "started" ) ), false );
+	assert.equal( fs.existsSync( path.join( current.installDir, "old-file.txt" ) ), true );
+	assertPreserved( current );
 	assert.equal( await updater.discardUpdate( job ), true );
 } );
 

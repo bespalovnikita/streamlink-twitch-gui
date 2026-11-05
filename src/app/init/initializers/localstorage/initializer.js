@@ -3,6 +3,11 @@ import updateNamespaces from "./namespaces";
 import updateSettings from "./settings";
 import updateChannelSettings from "./channelsettings";
 import updateSearch from "./search";
+import { applyPendingRestore } from "updater/profile-backup";
+import { dataPath } from "nwjs/App";
+import Process from "nwjs/process";
+import { commit } from "metadata";
+import { dirname } from "path";
 
 
 export default {
@@ -13,6 +18,11 @@ export default {
 	//       and run upgrades against these numbers
 	// TODO: Make this initializer more DRY
 	initialize() {
+		applyPendingRestore({
+			storage: LS, profileDir: dataPath, installDir: dirname( Process.execPath ),
+			identity: { commit }, env: Process.env
+		});
+
 		try {
 			updateNamespaces( LS );
 		} catch ( e ) {}

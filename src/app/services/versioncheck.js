@@ -378,6 +378,11 @@ export default Service.extend( /** @class VersioncheckService */ {
 			return true;
 		} catch ( error ) {
 			this._recordHistory( "install", "failed", { update: this.release, code: error.code } );
+			if ( this._installJob && installer.discardUpdate ) {
+				const discarded = await installer.discardUpdate( this._installJob )
+					.catch( () => false );
+				if ( discarded === true ) { this._installJob = null; }
+			}
 			const invalidArchive = [ "UPDATE_INTEGRITY", "UPDATE_ARCHIVE", "UPDATE_PACKAGE" ];
 			if ( invalidArchive.includes( error.code ) ) {
 				this._archivePath = null;

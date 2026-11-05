@@ -6,6 +6,8 @@ const path = require( "path" );
 const crypto = require( "crypto" );
 const zlib = require( "zlib" );
 const { spawn } = require( "child_process" );
+const { checkUpdateSpace } = require( "./space" );
+const { createProfileBackup } = require( "./profile-backup" );
 
 const APP = "streamlink-twitch-gui";
 const SHA = /^[a-f0-9]{40}$/;
@@ -144,17 +146,17 @@ function paxPath( data ) {
 	return result;
 }
 
-async function drainTar( iterator, expanded ) {
+async function drainTar( iterator, expanded, limit ) {
 	for await ( const chunk of { [Symbol.asyncIterator]: () => iterator } ) {
 		expanded += chunk.length;
-		if ( expanded > MAX_EXPANDED || chunk.some( byte => byte !== 0 ) ) {
+		if ( expanded > MAX_EXPANDED || expanded > limit || chunk.some( byte => byte !== 0 ) ) {
 			throw failure( "UPDATE_ARCHIVE" );
 		}
 	}
 }
 
 // Inspect raw headers before invoking tar: links and extensions cannot change extraction paths.
-async function inspectTar( filename ) {
+async function inspectTar( filename, limit ) {
 	const source = fs.createReadStream( filename );
 	const stream = source.pipe( zlib.createGunzip() );
 	source.once( "error", error => stream.destroy( error ) );
@@ -169,7 +171,9 @@ async function inspectTar( filename ) {
 				if ( chunk.done ) { throw failure( "UPDATE_ARCHIVE" ); }
 				pending = chunk.value;
 				expanded += pending.length;
-				if ( expanded > MAX_EXPANDED ) { throw failure( "UPDATE_ARCHIVE" ); }
+				if ( expanded > MAX_EXPANDED || expanded > limit ) {
+					throw failure( "UPDATE_ARCHIVE" );
+				}
 			}
 			const size = Math.min( length, pending.length );
 			if ( retain ) { parts.push( pending.subarray( 0, size ) ); }
@@ -186,7 +190,7 @@ async function inspectTar( filename ) {
 			if ( header.every( byte => byte === 0 ) ) {
 				if ( nextName || !seen.size ) { throw failure( "UPDATE_ARCHIVE" ); }
 				if ( pending.some( byte => byte !== 0 ) ) { throw failure( "UPDATE_ARCHIVE" ); }
-				await drainTar( iterator, expanded );
+				await drainTar( iterator, expanded, limit );
 				return;
 			}
 			const expected = tarNumber( header, 148, 8 );
@@ -255,7 +259,7 @@ async function checkPackage( directory, commit, platform ) {
 }
 
 async function prepareUpdate( options ) {
-	const { archivePath, update, installDir, profileDir,
+	const { archivePath, update, installDir, profileDir, storage, identity,
 		platform = process.platform, arch = "x64", helpersDir
 	} = options;
 	if ( ![ "linux", "win32" ].includes( platform ) || arch !== "x64"
@@ -267,16 +271,21 @@ async function prepareUpdate( options ) {
 	const asset = manifest && manifest.platforms && manifest.platforms[key];
 	if ( !manifest || manifest.schema !== 1 || manifest.channel !== "master"
 		|| !SHA.test( manifest.commit ) || !asset || !/^[a-f0-9]{64}$/.test( asset.sha256 )
-		|| !Number.isSafeInteger( asset.size ) || asset.size < 1 ) {
+		|| !Number.isSafeInteger( asset.size ) || asset.size < 1
+		|| !Number.isSafeInteger( asset.unpackedSize ) || asset.unpackedSize < 1
+		|| asset.unpackedSize > MAX_EXPANDED ) {
 		throw failure( "UPDATE_INTEGRITY" );
 	}
-	const { install } = await checkLocation( installDir, profileDir, platform );
+	const { install, profile } = await checkLocation( installDir, profileDir, platform );
+	await checkUpdateSpace({ update, installDir: install, profileDir: profile,
+		downloadPath: archivePath, phase: "prepare" });
 	const token = crypto.randomBytes( 32 ).toString( "hex" );
 	const parent = path.dirname( install );
 	const base = jobBase( token );
 	const jobDir = path.join( parent, base );
 	const job = {
 		schema: 1, jobDir, jobFile: path.join( jobDir, "job.json" ), installDir: install,
+		profileDir: profile, sourceCommit: null, profileBackupFile: null, profileBackupSha256: null,
 		stageDir: path.join( parent, `${base}-stage` ),
 		backupDir: path.join( parent, `${base}-backup` ),
 		helperPath: path.join( jobDir, platform === "win32" ? "install.ps1" : "install.sh" ),
@@ -286,7 +295,8 @@ async function prepareUpdate( options ) {
 		statusFile: path.join( jobDir, "status.json" ),
 		executable: APP + ( platform === "win32" ? ".exe" : "" ),
 		archivePath: path.join( jobDir, platform === "win32" ? "update.zip" : "update.tar.gz" ),
-		archiveSha256: asset.sha256, archiveSize: asset.size, timeoutMs: 60000,
+		archiveSha256: asset.sha256, archiveSize: asset.size,
+		archiveUnpackedSize: asset.unpackedSize, timeoutMs: 60000,
 		parentPid: 0, args: []
 	};
 	let created = false;
@@ -313,11 +323,18 @@ async function prepareUpdate( options ) {
 				"-ExecutionPolicy", "Bypass", "-File", job.helperPath, "-JobFile", job.jobFile,
 				"-Prepare" ] );
 		} else {
-			await inspectTar( job.archivePath );
+			await inspectTar( job.archivePath, asset.unpackedSize );
 			await command( "tar", [ "-xzf", job.archivePath, "-C", job.stageDir,
 				"--strip-components=1", "--no-same-owner", "--no-same-permissions" ] );
 		}
 		await checkPackage( job.stageDir, job.commit, platform );
+		const backup = await createProfileBackup({
+			profileDir: profile, storage, identity, targetCommit: manifest.commit, token
+		});
+		job.sourceCommit = backup.sourceCommit;
+		job.profileBackupFile = backup.path;
+		job.profileBackupSha256 = backup.sha256;
+		await fsp.writeFile( job.jobFile, JSON.stringify( job ), { mode: 0o600 } );
 		return job;
 	} catch ( error ) {
 		let helperCode;
@@ -328,6 +345,7 @@ async function prepareUpdate( options ) {
 		if ( stageOwned ) { await fsp.rm( job.stageDir, { recursive: true, force: true } ); }
 		if ( created ) { await fsp.rm( jobDir, { recursive: true, force: true } ); }
 		if ( helperCode ) { throw failure( helperCode, error ); }
+		if ( [ "ENOSPC", "EDQUOT" ].includes( error.code ) ) { throw failure( "UPDATE_NO_SPACE" ); }
 		if ( error.code === "EEXIST" ) { throw failure( "UPDATE_BUSY", error ); }
 		if ( [ "EACCES", "EPERM", "EROFS" ].includes( error.code ) ) {
 			throw failure( "UPDATE_NOT_WRITABLE", error );
@@ -353,6 +371,7 @@ async function startInstall( job, { parentPid = process.pid, args = [] } = {} ) 
 		throw failure( "UPDATE_INTEGRITY" );
 	}
 	await checkPackage( job.stageDir, job.commit, job.platform );
+	await verifyProfileBackup( job );
 	try { process.kill( parentPid, 0 ); } catch ( error ) {
 		throw failure( "UPDATE_START", error );
 	}
@@ -369,7 +388,7 @@ async function startInstall( job, { parentPid = process.pid, args = [] } = {} ) 
 		? [ job.helperPath, job.jobFile ]
 		: [ job.helperPath, job.jobFile, job.installDir, job.stageDir, job.backupDir,
 			job.jobDir, job.token, String( parentPid ), String( job.timeoutMs ),
-			String( job.renameTimeoutMs || 30000 ), ...args ];
+			String( job.renameTimeoutMs || 30000 ), job.profileDir, ...args ];
 	let child;
 	try {
 		const log = await fsp.open( path.join( job.jobDir, "helper.log" ), "a", 0o600 );
@@ -406,6 +425,23 @@ async function helperReady( job ) {
 		if ( error.code !== "ENOENT" ) { throw error; }
 		return false;
 	}
+}
+
+async function verifyProfileBackup( job ) {
+	try {
+		if ( !SHA.test( job.sourceCommit ) || !TOKEN.test( job.profileBackupSha256 )
+			|| typeof job.profileDir !== "string" || typeof job.profileBackupFile !== "string" ) {
+			throw new Error();
+		}
+		const profile = await fsp.realpath( job.profileDir );
+		const root = path.join( profile, "updater-backups" );
+		if ( path.dirname( job.profileBackupFile ) !== root
+			|| await fsp.realpath( job.profileBackupFile ) !== job.profileBackupFile
+			|| !( await fsp.lstat( job.profileBackupFile ) ).isFile()
+			|| await hash( job.profileBackupFile ) !== job.profileBackupSha256 ) {
+			throw new Error();
+		}
+	} catch ( ignored ) { throw failure( "UPDATE_PROFILE_BACKUP" ); }
 }
 
 async function stopHelper( child, platform ) {
@@ -506,7 +542,8 @@ async function readRollbackStatus( { installDir,
 		if ( await fsp.realpath( installDir ) !== job.installDir
 			|| path.resolve( jobFile ) !== job.jobFile ) { return null; }
 		const status = JSON.parse( await fsp.readFile( job.statusFile, "utf8" ) );
-		return status.state === "rolled-back" ? status : null;
+		return status.state === "rolled-back"
+			? { state: status.state, code: status.code, commit: job.commit } : null;
 	} catch ( error ) { return null; }
 }
 
@@ -532,4 +569,5 @@ async function confirmStartup( { installDir, identity,
 	} catch ( error ) { return false; }
 }
 
-module.exports = { prepareUpdate, startInstall, confirmStartup, discardUpdate, readRollbackStatus };
+module.exports = { prepareUpdate, startInstall, confirmStartup, discardUpdate,
+	readRollbackStatus, checkUpdateSpace };

@@ -242,9 +242,14 @@ exec /usr/bin/mv "$@"
 			args: [ appScript, mode, current.profileDir, eventFile, ...literalArgs ]
 		} );
 	} catch ( error ) {
-		for ( const filename of [ "helper.log", "status.json" ] ) {
+		for ( const filename of [ "helper.log", "helper-phase.txt", "status.json" ] ) {
 			const log = path.join( job.jobDir, filename );
 			if ( fs.existsSync( log ) ) { context.diagnostic( fs.readFileSync( log, "utf8" ) ); }
+		}
+		let cause = error;
+		for ( let depth = 0; cause && depth < 4; depth++ ) {
+			context.diagnostic( `${cause.code || "Error"}: ${cause.message}` );
+			cause = cause.cause;
 		}
 		throw error;
 	} finally { process.env.PATH = inheritedPath; }

@@ -371,23 +371,25 @@ async function startInstall( job, { parentPid = process.pid, args = [] } = {} ) 
 	let child;
 	try {
 		const log = await fsp.open( path.join( job.jobDir, "helper.log" ), "a", 0o600 );
+		let spawnError;
 		try {
 			child = spawn( executable, parameters, {
 				detached: true, windowsHide: true,
 				stdio: [ "ignore", log.fd, log.fd ], cwd: job.jobDir
 			});
+			child.once( "error", error => { spawnError = error; } );
 		} finally { await log.close(); }
-		let spawnError;
-		child.once( "error", error => { spawnError = error; } );
 		const timeout = Math.max( 100, Math.min( 30000, job.handshakeTimeoutMs || 10000 ) );
 		for ( let attempt = 0; attempt < timeout / 100; attempt++ ) {
-			if ( spawnError || child.exitCode !== null || child.signalCode !== null ) {
-				throw failure( "UPDATE_START", spawnError );
+			if ( spawnError ) { throw failure( "UPDATE_START", spawnError ); }
+			if ( child.exitCode !== null || child.signalCode !== null ) {
+				const reason = `Helper exited before READY: ${child.exitCode}/${child.signalCode}`;
+				throw failure( "UPDATE_START", new Error( reason ) );
 			}
 			if ( await helperReady( job ) ) { child.unref(); return; }
 			await new Promise( resolve => setTimeout( resolve, 100 ) );
 		}
-		throw failure( "UPDATE_START" );
+		throw failure( "UPDATE_START", new Error( "Helper READY timed out" ) );
 	} catch ( error ) {
 		await stopHelper( child );
 		await fsp.rm( path.join( job.jobDir, "started" ), { force: true } );

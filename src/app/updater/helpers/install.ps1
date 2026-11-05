@@ -8,6 +8,11 @@ $ErrorActionPreference = 'Stop'
 $script:failureCode = 'UPDATE_START'
 $script:job = $null
 
+function Write-Phase([string]$Name) {
+	$directory = [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($JobFile))
+	[IO.File]::WriteAllText((Join-Path $directory 'helper-phase.txt'), $Name)
+}
+
 function Fail([string]$Code, [string]$Message) {
 	$script:failureCode = $Code
 	throw $Message
@@ -309,12 +314,15 @@ function Move-WithRetry([string]$Source, [string]$Destination) {
 }
 
 function Install-Application {
+	Write-Phase 'archive'
 	Check-Archive
+	Write-Phase 'package'
 	Check-Package
 	$script:failureCode = 'UPDATE_START'
 	if (Test-Path -LiteralPath $script:job.readyFile) {
 		Fail 'UPDATE_START' 'The update job has already started'
 	}
+	Write-Phase 'ready'
 	Write-Text $script:job.readyFile $script:job.token
 	$deadline = [DateTime]::UtcNow.AddSeconds(120)
 	while ($script:job.parentPid -gt 0 -and
@@ -373,6 +381,7 @@ function Install-Application {
 }
 
 try {
+	if ($Prepare) { Write-Phase 'prepare' } else { Write-Phase 'read-job' }
 	$script:job = Read-Job
 	if ($Prepare) {
 		Expand-Application

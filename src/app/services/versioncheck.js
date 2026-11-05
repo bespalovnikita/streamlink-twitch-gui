@@ -101,9 +101,12 @@ export default Service.extend( /** @class VersioncheckService */ {
 		return owner.hasRegistration( "controller:settings" )
 			? owner.lookup( "controller:settings" ) : null;
 	}),
-	hasUnsavedSettings: computed( "_settingsController.model.isDirty", function() {
-		return !!get( this, "_settingsController.model.isDirty" );
-	}),
+	hasUnsavedSettings: computed(
+		"_settingsController.model.isDirty", "settings.content.isSaving", function() {
+			return !!get( this, "_settingsController.model.isDirty" )
+				|| !!get( this, "settings.content.isSaving" );
+		}
+	),
 
 
 	check() {

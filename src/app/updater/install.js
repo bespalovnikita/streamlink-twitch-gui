@@ -361,9 +361,12 @@ async function startInstall( job, { parentPid = process.pid, args = [] } = {} ) 
 		await fsp.writeFile( startedFile, job.token, { flag: "wx" } );
 	} catch ( error ) { throw failure( "UPDATE_BUSY", error ); }
 	await fsp.writeFile( job.jobFile, JSON.stringify( current ), { mode: 0o600 } );
-	const executable = job.platform === "win32" ? "powershell.exe" : "bash";
+	// Node 20 can exit detached PowerShell before executing a script without a console.
+	// https://github.com/nodejs/node/issues/51018
+	const executable = job.platform === "win32" ? "conhost.exe" : "bash";
 	const parameters = job.platform === "win32"
-		? [ "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File",
+		? [ "--headless", "powershell.exe", "-NoProfile", "-NonInteractive",
+			"-ExecutionPolicy", "Bypass", "-File",
 			job.helperPath, "-JobFile", job.jobFile ]
 		: [ job.helperPath, job.jobFile, job.installDir, job.stageDir, job.backupDir,
 			job.jobDir, job.token, String( parentPid ), String( job.timeoutMs ),
@@ -375,9 +378,14 @@ async function startInstall( job, { parentPid = process.pid, args = [] } = {} ) 
 		try {
 			child = spawn( executable, parameters, {
 				detached: true, windowsHide: true,
-				stdio: [ "ignore", log.fd, log.fd ], cwd: job.jobDir
+				stdio: [ job.platform === "win32" ? "pipe" : "ignore", log.fd, log.fd ],
+				cwd: job.jobDir
 			});
 			child.once( "error", error => { spawnError = error; } );
+			if ( child.stdin ) {
+				child.stdin.on( "error", () => {} );
+				child.stdin.end();
+			}
 		} finally { await log.close(); }
 		const timeout = Math.max( 100, Math.min( 30000, job.handshakeTimeoutMs || 10000 ) );
 		for ( let attempt = 0; attempt < timeout / 100; attempt++ ) {
@@ -391,7 +399,7 @@ async function startInstall( job, { parentPid = process.pid, args = [] } = {} ) 
 		}
 		throw failure( "UPDATE_START", new Error( "Helper READY timed out" ) );
 	} catch ( error ) {
-		await stopHelper( child );
+		await stopHelper( child, job.platform );
 		await fsp.rm( path.join( job.jobDir, "started" ), { force: true } );
 		await fsp.rm( job.readyFile, { force: true } );
 		throw failure( "UPDATE_START", error );
@@ -405,9 +413,17 @@ async function helperReady( job ) {
 	}
 }
 
-async function stopHelper( child ) {
+async function stopHelper( child, platform ) {
 	if ( !child || !child.pid ) { return; }
-	child.kill( "SIGTERM" );
+	if ( platform === "win32" && child.exitCode === null && child.signalCode === null ) {
+		try {
+			await command( "taskkill.exe", [ "/PID", String( child.pid ), "/T", "/F" ] );
+		} catch ( error ) {
+			if ( child.exitCode === null && child.signalCode === null ) {
+				throw failure( "UPDATE_BUSY", error );
+			}
+		}
+	} else { child.kill( "SIGTERM" ); }
 	for ( let attempt = 0; attempt < 30; attempt++ ) {
 		if ( child.exitCode !== null || child.signalCode !== null ) { return; }
 		if ( attempt === 10 ) { child.kill( "SIGKILL" ); }

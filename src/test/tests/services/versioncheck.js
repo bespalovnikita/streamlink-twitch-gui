@@ -397,6 +397,28 @@ module( "services/versioncheck", function( hooks ) {
 		assert.ok( this.startInstall.calledOnce, "Can restart after settings are resolved" );
 	});
 
+	test( "A pending settings save blocks restart", async function( assert ) {
+		const updater = await this.readyUpdate();
+		const savingSettings = EmberObject.create({ isSaving: true });
+		this.owner.lookup( "service:settings" ).set( "content", savingSettings );
+		assert.notOk( this.settingsModel.isDirty, "The settings buffer has already been applied" );
+
+		await updater.requestInstall();
+		await updater.install({ confirmed: true });
+		assert.ok( updater.hasUnsavedSettings, "Includes settings that have not finished saving" );
+		assert.ok( updater.confirmingInstall, "Shows the unresolved settings warning" );
+		assert.notOk( this.prepareUpdate.called, "Does not prepare while preferences are saving" );
+		assert.notOk( this.startInstall.called, "Does not start the helper before persistence" );
+		assert.notOk( this.quit.called, "Keeps the application running until settings are saved" );
+
+		savingSettings.set( "isSaving", false );
+		await updater.requestInstall();
+		assert.notOk( updater.hasUnsavedSettings, "Observes completion of the settings save" );
+		assert.ok( this.prepareUpdate.calledOnce, "Prepares only after persistence is complete" );
+		assert.ok( this.startInstall.calledOnce, "Can install after preferences are saved" );
+		assert.ok( this.quit.calledOnce, "Quits after the helper is ready" );
+	});
+
 	test( "The application quits only after the helper is ready", async function( assert ) {
 		const helper = deferred();
 		const entered = deferred();

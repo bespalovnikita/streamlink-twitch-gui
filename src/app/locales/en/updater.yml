@@ -25,7 +25,7 @@ action:
     back: Back
 warning:
     streams: Open streams may close when the application restarts. Restart and install the update?
-    settings: There are unapplied settings. Save or discard them in Settings before restarting.
+    settings: Save or discard changes in Settings and wait for any save to finish before restarting.
 error:
     rollback: The update could not be completed. The previous application version has been restored; your settings have been preserved.
     generic: Could not update the application. Please try again.
@@ -38,5 +38,5 @@ error:
     permission: The updater cannot write to the application folder. Check folder permissions and try again.
     busy: An update is already in progress. Wait for it to finish.
     start: Could not start the update installer. Please try again.
-    settings: Save or discard your unapplied settings before restarting to install the update.
+    settings: Save or discard settings changes and wait for any save to finish before installing the update.
 progress: "Downloaded: {percent}%"

@@ -186,6 +186,79 @@ async function waitFor( predicate, message, timeout = 15000 ) {
 	assert.fail( message );
 }
 
+function ownChild( context, child ) {
+	context.after( () => {
+		if ( child.pid && child.exitCode === null && child.signalCode === null ) { child.kill(); }
+	} );
+}
+
+function diagnoseTransaction( context, job, error ) {
+	const logs = [ "helper.log", "helper-phase.txt", "status.json" ]
+		.map( filename => path.join( job.jobDir, filename ) );
+	if ( error.bootstrapErrorFile ) { logs.push( error.bootstrapErrorFile ); }
+	for ( const log of logs ) {
+		if ( fs.existsSync( log ) ) { context.diagnostic( fs.readFileSync( log, "utf8" ) ); }
+	}
+	let cause = error;
+	for ( let depth = 0; cause && depth < 4; depth++ ) {
+		context.diagnostic( `${cause.code || "Error"}: ${cause.message}` );
+		cause = cause.cause;
+	}
+}
+
+async function startInstallOwner( context, current, job, args ) {
+	const script = path.join( current.root, "install-owner.cjs" );
+	const configFile = path.join( current.root, "install-owner.json" );
+	const readyFile = path.join( current.root, "owner-ready" );
+	const releaseFile = path.join( current.root, "owner-release" );
+	const errorFile = path.join( current.root, "startup-error.txt" );
+	fs.writeFileSync( configFile, json( {
+		job, args, readyFile, releaseFile, errorFile, modulePath
+	} ), { mode: 0o600 } );
+	fs.writeFileSync( script, `
+const fs = require("node:fs");
+const config = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const updater = require(config.modulePath);
+updater.startInstall(config.job, {parentPid: process.pid, args: config.args}).then(() => {
+	fs.writeFileSync(config.readyFile, "ready", {mode: 0o600});
+	const timer = setInterval(() => {
+		if (fs.existsSync(config.releaseFile)) {
+			clearInterval(timer);
+			process.exit(0);
+		}
+	}, 50);
+}).catch(error => {
+	const messages = [];
+	for (let depth = 0; error && depth < 4; depth++, error = error.cause) {
+		messages.push(String(error.code || "Error") + ": " + String(error.message));
+	}
+	const text = messages.join("\\n").split(config.job.token).join("[redacted]");
+	fs.writeFileSync(config.errorFile, text, {mode: 0o600});
+	process.exit(17);
+});
+` );
+	const parent = spawn( process.execPath, [ script, configFile ], {
+		stdio: "ignore", windowsHide: true
+	} );
+	ownChild( context, parent );
+	let spawnError;
+	parent.once( "error", error => { spawnError = error; } );
+	try {
+		await waitFor( () => {
+			if ( fs.existsSync( readyFile ) ) { return true; }
+			if ( spawnError ) { throw spawnError; }
+			if ( parent.exitCode !== null || parent.signalCode !== null ) {
+				throw new Error( "The installer owner exited before READY" );
+			}
+			return false;
+		}, "The installer owner must reach READY" );
+	} catch ( error ) {
+		error.bootstrapErrorFile = errorFile;
+		throw error;
+	}
+	return { parent, releaseFile };
+}
+
 async function transaction( context, mode ) {
 	const current = await fixture( context, { real: true } );
 	const eventFile = path.join( current.root, "launch.json" );
@@ -232,25 +305,24 @@ exec /usr/bin/mv "$@"
 `, { mode: 0o755 } );
 		process.env.PATH = `${bin}${path.delimiter}${inheritedPath}`;
 	}
-	const parent = spawn( process.execPath, [ "-e", "setInterval(() => {}, 1000)" ], {
-		stdio: "ignore", windowsHide: true
-	} );
-	context.after( () => { if ( parent.exitCode === null ) { parent.kill(); } } );
+	let parent;
+	let releaseParent;
 	try {
-		await updater.startInstall( job, {
-			parentPid: parent.pid,
-			args: [ appScript, mode, current.profileDir, eventFile, ...literalArgs ]
-		} );
+		const args = [ appScript, mode, current.profileDir, eventFile, ...literalArgs ];
+		if ( mode === "success" ) {
+			const owner = await startInstallOwner( context, current, job, args );
+			parent = owner.parent;
+			releaseParent = () => fs.writeFileSync( owner.releaseFile, "release" );
+		} else {
+			parent = spawn( process.execPath, [ "-e", "setInterval(() => {}, 1000)" ], {
+				stdio: "ignore", windowsHide: true
+			} );
+			ownChild( context, parent );
+			await updater.startInstall( job, { parentPid: parent.pid, args } );
+			releaseParent = () => parent.kill();
+		}
 	} catch ( error ) {
-		for ( const filename of [ "helper.log", "helper-phase.txt", "status.json" ] ) {
-			const log = path.join( job.jobDir, filename );
-			if ( fs.existsSync( log ) ) { context.diagnostic( fs.readFileSync( log, "utf8" ) ); }
-		}
-		let cause = error;
-		for ( let depth = 0; cause && depth < 4; depth++ ) {
-			context.diagnostic( `${cause.code || "Error"}: ${cause.message}` );
-			cause = cause.cause;
-		}
+		diagnoseTransaction( context, job, error );
 		throw error;
 	} finally { process.env.PATH = inheritedPath; }
 	assert.equal( fs.readFileSync( job.readyFile, "utf8" ), job.token );
@@ -258,8 +330,12 @@ exec /usr/bin/mv "$@"
 		"old application", "The app stays unchanged while its parent is alive" );
 	assert.equal( fs.existsSync( eventFile ), false, "The live parent must not be relaunched" );
 	const exited = once( parent, "exit" );
-	parent.kill();
-	await exited;
+	releaseParent();
+	const [ exitCode, signal ] = await exited;
+	if ( mode === "success" ) {
+		assert.equal( exitCode, 0, "The process that started the helper must exit normally" );
+		assert.equal( signal, null );
+	}
 	const status = await waitFor( () => {
 		try { return JSON.parse( fs.readFileSync( job.statusFile, "utf8" ) ); } catch ( error ) {
 			if ( error.code !== "ENOENT" && !( error instanceof SyntaxError ) ) { throw error; }
@@ -270,6 +346,39 @@ exec /usr/bin/mv "$@"
 	assertPreserved( current );
 	return { current, job, status, event, literalArgs };
 }
+
+test( "detached Windows PowerShell executes through a headless console", {
+	skip: !isWindows, timeout: 30000
+}, async context => {
+	const root = fs.mkdtempSync( path.join( os.tmpdir(), "stgui-ps-probe-" ) );
+	context.after( () => fs.promises.rm( root, { recursive: true, force: true } ) );
+	const outcomes = {};
+	for ( const mode of [ "ignore", "pipe", "nul", "conhost" ] ) {
+		const marker = path.join( root, `${mode}.txt` );
+		const log = fs.openSync( path.join( root, `${mode}.log` ), "a" );
+		const input = mode === "nul" ? fs.openSync( "NUL", "r" )
+			: mode === "conhost" ? "pipe" : mode;
+		const code = "[IO.File]::WriteAllText($env:STGUI_PROBE_FILE, 'executed')";
+		const args = [ "-NoProfile", "-NonInteractive", "-Command", code ];
+		const program = mode === "conhost" ? "conhost.exe" : "powershell.exe";
+		const child = spawn( program, mode === "conhost"
+			? [ "--headless", "powershell.exe", ...args ] : args, {
+				detached: true, windowsHide: true,
+				stdio: [ input, log, log ], env: { ...process.env, STGUI_PROBE_FILE: marker }
+			} );
+		fs.closeSync( log );
+		if ( mode === "nul" ) { fs.closeSync( input ); }
+		if ( child.stdin ) { child.stdin.on( "error", () => {} ); child.stdin.end(); }
+		const timeout = setTimeout( () => child.kill(), 5000 );
+		try {
+			const [ exitCode, signal ] = await once( child, "exit" );
+			outcomes[mode] = { executed: fs.existsSync( marker ), exitCode, signal };
+		} finally { clearTimeout( timeout ); }
+	}
+	context.diagnostic( JSON.stringify( outcomes ) );
+	assert.equal( outcomes.conhost.executed, true );
+	assert.equal( outcomes.conhost.exitCode, 0 );
+} );
 
 test( "swaps the complete app after exit and accepts only a healthy new startup", {
 	skip: !supported, timeout: 45000
@@ -481,6 +590,8 @@ ${mode === "exit" ? "exit 17" : "exec sleep 20"}
 		assert.equal( fs.existsSync( path.join( current.installDir, "old-file.txt" ) ), true );
 		assert.equal( fs.existsSync( job.readyFile ), false );
 		assert.equal( fs.existsSync( path.join( job.jobDir, "started" ) ), false );
+		assert.equal( fs.existsSync( pidFile ), true,
+			"The helper must actually execute its script" );
 		if ( fs.existsSync( pidFile ) ) {
 			const helperPid = Number( fs.readFileSync( pidFile, "utf8" ) );
 			await waitFor( () => {

@@ -30,6 +30,7 @@ test( "Application instance initializer", assert => {
 	const getItemStub = sinon.stub();
 	const setItemStub = sinon.stub();
 	const namespacesSpy = sinon.spy();
+	const restoreSpy = sinon.spy();
 	const settingsSpy = sinon.spy();
 	const channelsettingsSpy = sinon.spy();
 
@@ -46,6 +47,7 @@ test( "Application instance initializer", assert => {
 
 	const { default: { name, before, initialize } } = instanceInitializerInjector( {
 		"./localstorage": LS,
+		"updater/profile-backup": { applyPendingRestore: restoreSpy },
 		"./namespaces": namespacesSpy,
 		"./settings": settingsSpy,
 		"./channelsettings": channelsettingsSpy
@@ -89,6 +91,7 @@ test( "Application instance initializer", assert => {
 	);
 
 	assert.order([
+		restoreSpy.callIds[0],
 		namespacesSpy.callIds[0],
 		getItemStub.callIds[0],
 		settingsSpy.callIds[0],
@@ -99,4 +102,21 @@ test( "Application instance initializer", assert => {
 		setItemStub.callIds[1]
 	], "Calls methods in correct order" );
 
+});
+
+
+test( "A failed restore stops all migrations and storage access", assert => {
+	const LS = { getItem: sinon.spy(), setItem: sinon.spy() };
+	const namespaces = sinon.spy();
+	const restore = sinon.stub().throws( new Error( "UPDATE_PROFILE_BACKUP" ) );
+	const { default: { initialize } } = instanceInitializerInjector({
+		"./localstorage": LS,
+		"./namespaces": namespaces,
+		"updater/profile-backup": { applyPendingRestore: restore }
+	});
+
+	assert.throws( () => initialize(), /UPDATE_PROFILE_BACKUP/, "Fails before migration" );
+	assert.ok( namespaces.notCalled, "Does not run namespace migrations" );
+	assert.ok( LS.getItem.notCalled, "Does not load records for migration" );
+	assert.ok( LS.setItem.notCalled, "Does not write migrated records" );
 });

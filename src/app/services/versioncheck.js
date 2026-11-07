@@ -1,133 +1,561 @@
-import { set } from "@ember/object";
+import { getOwner } from "@ember/application";
+import { get, set, setProperties, computed } from "@ember/object";
+import { join, scheduleOnce } from "@ember/runloop";
 import { default as Service, inject as service } from "@ember/service";
 import semverLt from "semver/functions/lt";
 import { main as mainConfig, update as updateConfig } from "config";
-import { version as buildVersion } from "metadata";
-import { manifest } from "nwjs/App";
+import * as metadata from "metadata";
+import { manifest, dataPath, quit } from "nwjs/App";
+import Process from "nwjs/process";
 import { argv, ARG_VERSIONCHECK } from "nwjs/argv";
 import { isDebug, isDevelopment } from "nwjs/debug";
+import { platform, arch, cachedir } from "utils/node/platform";
+import { basename, dirname, join as joinPath } from "path";
+import * as client from "updater/client";
+import * as installer from "updater/install";
+import * as history from "updater/history";
+import LS from "init/initializers/localstorage/localstorage";
 
 
 const { "display-name": displayName } = mainConfig;
-const { "check-again": checkAgain, "show-debug-message": showDebugMessage } = updateConfig;
-const { version } = manifest;
+const { "show-debug-message": showDebugMessage } = updateConfig;
+const busyStates = [ "checking", "downloading", "preparing", "installing" ];
+const errorKeys = {
+	NETWORK_ERROR: "updater.error.offline",
+	REQUEST_TIMEOUT: "updater.error.offline",
+	HTTP_ERROR: "updater.error.offline",
+	UNSUPPORTED_PLATFORM: "updater.error.unsupported",
+	INVALID_CURRENT_BUILD: "updater.error.unsupported",
+	UPDATE_UNSUPPORTED: "updater.error.unsupported",
+	DOWNLOAD_FAILED: "updater.error.download",
+	DOWNLOAD_TRUNCATED: "updater.error.download",
+	CHECKSUM_MISMATCH: "updater.error.integrity",
+	UPDATE_INTEGRITY: "updater.error.integrity",
+	UPDATE_ARCHIVE: "updater.error.archive",
+	UPDATE_PACKAGE: "updater.error.archive",
+	UPDATE_LOCATION: "updater.error.location",
+	UPDATE_PROFILE: "updater.error.location",
+	UPDATE_NOT_WRITABLE: "updater.error.permission",
+	UPDATE_BUSY: "updater.error.busy",
+	UPDATE_START: "updater.error.start",
+	UPDATE_ROLLBACK: "updater.error.rollback",
+	UPDATE_NO_SPACE: "updater.error.space",
+	UPDATE_PROFILE_BACKUP: "updater.error.profile",
+	UPDATE_PROFILE_RESTORE: "updater.error.profile",
+	INVALID_SIGNATURE: "updater.error.signature",
+	SIGNATURE_REQUIRED: "updater.error.signature",
+	MISSING_SIGNATURE: "updater.error.signature",
+	UNTRUSTED_SIGNING_KEY: "updater.error.signature",
+	SETTINGS_UNSAVED: "updater.error.settings"
+};
 
 
 export default Service.extend( /** @class VersioncheckService */ {
-	/** @type {ModalService} */
 	modal: service(),
-	/** @type {DS.Store} */
 	store: service(),
+	streaming: service(),
+	settings: service(),
+	router: service(),
 
-	version,
-
-	/** @type {Versioncheck} */
+	version: manifest.version,
+	currentVersion: manifest.version,
+	currentCommit: ( metadata.commit || "" ).slice( 0, 8 ),
 	model: null,
-	/** @type {GithubReleases} */
 	release: null,
+	state: "idle",
+	progress: 0,
+	errorCode: "",
+	confirmingInstall: false,
+	historyEntries: null,
+	historyBusy: false,
+	historyError: "",
+	diagnosticsBusy: false,
+	diagnosticsSaved: false,
+	_historyTask: null,
+	_startupPromise: null,
+	_recordPromise: null,
+	_checkPromise: null,
+	_downloadController: null,
+	_installJob: null,
+	_archivePath: null,
+	_downloadGeneration: 0,
+	_confirmationScheduled: false,
+	_skipping: false,
+
+	currentBuild: computed(function() {
+		return {
+			commit: metadata.commit,
+			buildNumber: metadata.buildNumber,
+			commitTime: metadata.commitTime
+		};
+	}),
+	installDir: computed(function() { return dirname( Process.execPath ); }),
+	historyFile: computed(function() { return joinPath( dataPath, "updater-history.json" ); }),
+	isSupported: computed(function() {
+		return !isDebug && !isDevelopment && arch === "x64"
+			&& [ "win32", "linux" ].includes( platform )
+			&& /^[a-f0-9]{40}$/.test( metadata.commit || "" )
+			&& metadata.buildNumber > 0 && metadata.commitTime > 0;
+	}).volatile(),
+	isBusy: computed( "state", "_skipping", function() {
+		return busyStates.includes( this.state ) || this._skipping;
+	}),
+	isDownloading: computed( "state", function() { return this.state === "downloading"; }),
+	isReady: computed( "state", function() { return this.state === "ready"; }),
+	canDownload: computed( "state", "release", "isBusy", function() {
+		return !!this.release && !this.isBusy && [ "available", "error" ].includes( this.state );
+	}),
+	statusKey: computed( "state", function() { return `updater.status.${this.state}`; }),
+	errorKey: computed( "errorCode", function() {
+		return this.errorCode ? errorKeys[ this.errorCode ] || "updater.error.generic" : "";
+	}),
+	historyErrorKey: computed( "historyError", function() {
+		if ( !this.historyError ) { return ""; }
+		return this.historyError === "UPDATE_DIAGNOSTICS"
+			? "updater.history.export-error" : "updater.history.error";
+	}),
+	hasFailedRelease: computed( "release", "model.failedCommit", function() {
+		return !!this.release && !!get( this, "model.failedCommit" )
+			&& this.release.manifest.commit === this.model.failedCommit;
+	}),
+	hasStreams: computed( "streaming.hasStreams", function() {
+		return !!get( this, "streaming.hasStreams" );
+	}),
+	_settingsController: computed(function() {
+		const owner = getOwner( this );
+		return owner.hasRegistration( "controller:settings" )
+			? owner.lookup( "controller:settings" ) : null;
+	}),
+	hasUnsavedSettings: computed(
+		"_settingsController.model.isDirty", "settings.content.isSaving", function() {
+			return !!get( this, "_settingsController.model.isDirty" )
+				|| !!get( this, "settings.content.isSaving" );
+		}
+	),
 
 
-	async check() {
+	check() {
+		if ( !this._startupPromise ) {
+			this._startupPromise = this._startup().catch( error => this._fail( error ) );
+		}
+		return this._startupPromise;
+	},
+	async _startup() {
 		const existinguser = await this._getRecord();
+		this._scheduleStartupConfirmation();
+		if ( installer.readRollbackStatus ) {
+			const rollback = await installer.readRollbackStatus({ installDir: this.installDir });
+			if ( rollback ) {
+				if ( /^[a-f0-9]{40}$/.test( rollback.commit || "" ) ) {
+					set( this.model, "failedCommit", rollback.commit );
+					await this.model.save();
+				}
+				this._recordHistory( "rollback", "failed", {
+					commit: rollback.commit, code: rollback.code || "UPDATE_ROLLBACK"
+				});
+				this._fail({ code: "UPDATE_ROLLBACK" });
+				this.modal.openModal( "newrelease", this );
+				return;
+			}
+		}
 		await this._showDebugMessage();
 		await this._check( existinguser );
 	},
-
-	async ignoreRelease() {
-		const { model } = this;
-		set( model, "checkagain", Date.now() + checkAgain );
-
-		await model.save();
+	async checkNow() {
+		if ( this.isBusy ) { return this._checkPromise; }
+		try {
+			if ( !this.model ) { await this._getRecord(); }
+			return await this._performCheck( true );
+		} catch ( error ) {
+			this._fail( error );
+			return null;
+		}
 	},
-
-
-	async _getRecord() {
+	async _checkForNewRelease() {
+		if ( !argv[ ARG_VERSIONCHECK ] ) { return; }
+		return this._performCheck( false );
+	},
+	_performCheck( manual ) {
+		if ( this.isBusy ) { return this._checkPromise; }
+		if ( !this.isSupported ) {
+			setProperties( this, { state: "unsupported", errorCode: "UNSUPPORTED_PLATFORM" } );
+			return Promise.resolve( null );
+		}
+		setProperties( this, { state: "checking", errorCode: "", confirmingInstall: false } );
+		this._recordHistory( "check", "started" );
+		this._checkPromise = this._queryRelease( manual );
+		return this._checkPromise;
+	},
+	async _queryRelease( manual ) {
+		try {
+			const update = await client.checkForUpdate({
+				repository: updateConfig.repository,
+				currentBuild: this.currentBuild,
+				platform,
+				arch
+			});
+			if ( this.isDestroying || this.isDestroyed ) { return null; }
+			if ( !update ) {
+				await this._discardPreparedUpdate();
+				setProperties( this, { release: null, state: "current" } );
+				this._recordHistory( "check", "current" );
+				return null;
+			}
+			if ( !manual && this.model && this.model.failedCommit === update.manifest.commit ) {
+				await this._discardPreparedUpdate();
+				setProperties( this, { release: null, state: "blocked" } );
+				this._recordHistory( "check", "blocked", {
+					update, code: "UPDATE_PREVIOUS_FAILURE"
+				});
+				return null;
+			}
+			if ( !manual && this.model && this.model.skippedTag === update.tag ) {
+				await this._discardPreparedUpdate();
+				setProperties( this, { release: null, state: "idle" } );
+				this._recordHistory( "check", "skipped", { update } );
+				return null;
+			}
+			const ready = this._archivePath && this.release && this.release.tag === update.tag;
+			if ( !ready ) { await this._discardPreparedUpdate(); }
+			setProperties( this, { release: update, state: ready ? "ready" : "available" } );
+			this._recordHistory( "check", "available", { update } );
+			this.modal.openModal( "newrelease", this );
+			return update;
+		} catch ( error ) {
+			this._recordHistory( "check", "failed", { code: error.code } );
+			this._fail( error, this._archivePath && this.release ? "ready" : "error" );
+			return null;
+		} finally {
+			this._checkPromise = null;
+		}
+	},
+	async download() {
+		if ( !this.release || this.isBusy || this.isReady || !this.isSupported ) { return false; }
+		const update = this.release;
+		const generation = ++this._downloadGeneration;
+		const controller = new AbortController();
+		this._downloadController = controller;
+		setProperties( this, { state: "downloading", progress: 0, errorCode: "" } );
+		this._recordHistory( "download", "started", { update } );
+		try {
+			const destination = joinPath(
+				cachedir, "updates", update.manifest.commit, update.asset.name
+			);
+			await installer.checkUpdateSpace({
+				update, installDir: this.installDir, profileDir: dataPath,
+				downloadPath: destination, phase: "download"
+			});
+			if ( generation !== this._downloadGeneration || controller.signal.aborted ) {
+				return false;
+			}
+			const archivePath = await client.downloadUpdate( update, destination, {
+				signal: controller.signal,
+				onProgress: value => join( () => {
+					if (
+						generation !== this._downloadGeneration || this.state !== "downloading"
+					) { return; }
+					const percent = typeof value === "number" ? value : value.percent;
+					const progress = Math.max( 0, Math.min( 100, Math.round( percent || 0 ) ) );
+					set( this, "progress", progress );
+				})
+			});
+			if ( generation !== this._downloadGeneration || controller.signal.aborted ) {
+				return false;
+			}
+			await this._discardPreparedUpdate();
+			if (
+				generation !== this._downloadGeneration || this.isDestroying || this.isDestroyed
+			) {
+				return false;
+			}
+			this._archivePath = archivePath;
+			if ( this.model && this.model.skippedTag === update.tag ) {
+				set( this.model, "skippedTag", "" );
+				await this.model.save();
+			}
+			if ( generation !== this._downloadGeneration ) { return false; }
+			setProperties( this, { state: "ready", progress: 100 } );
+			this._recordHistory( "download", "succeeded", { update } );
+			return true;
+		} catch ( error ) {
+			if ( generation !== this._downloadGeneration ) { return false; }
+			if (
+				controller.signal.aborted || error.code === "ABORTED" || error.name === "AbortError"
+			) {
+				setProperties( this, { state: "available", errorCode: "", progress: 0 } );
+				this._recordHistory( "download", "cancelled", { update } );
+			} else {
+				this._recordHistory( "download", "failed", { update, code: error.code } );
+				this._fail( error, this._archivePath ? "ready" : "error" );
+			}
+			return false;
+		} finally {
+			if ( this._downloadController === controller ) { this._downloadController = null; }
+		}
+	},
+	cancelDownload() {
+		if ( this.state !== "downloading" || !this._downloadController ) { return; }
+		++this._downloadGeneration;
+		this._downloadController.abort();
+		this._recordHistory( "download", "cancelled", { update: this.release } );
+		setProperties( this, { state: "available", progress: 0, errorCode: "" } );
+	},
+	later() {
+		set( this, "confirmingInstall", false );
+		this.modal.closeModal( this, "newrelease" );
+	},
+	async ignoreRelease() {
+		if ( !this.release || this.isBusy ) { return false; }
+		set( this, "_skipping", true );
+		try {
+			if ( !this.model ) { await this._getRecord(); }
+			set( this.model, "skippedTag", this.release.tag );
+			await this.model.save();
+			this._recordHistory( "check", "skipped", { update: this.release } );
+			await this._discardPreparedUpdate();
+			setProperties( this, { release: null, state: "idle", errorCode: "" } );
+			this.later();
+			return true;
+		} catch ( error ) {
+			this._fail( error );
+			return false;
+		} finally {
+			if ( !this.isDestroying && !this.isDestroyed ) { set( this, "_skipping", false ); }
+		}
+	},
+	requestInstall() {
+		if ( !this.isReady || this.isBusy ) { return Promise.resolve( false ); }
+		if ( this.hasStreams || this.hasUnsavedSettings ) {
+			set( this, "confirmingInstall", true );
+			this.modal.openModal( "newrelease", this );
+			return Promise.resolve( false );
+		}
+		return this.install();
+	},
+	async install( { confirmed = false } = {} ) {
+		if (
+			!this.isReady || this.isBusy || !this._archivePath || !this.isSupported
+		) { return false; }
+		if ( this.hasUnsavedSettings ) {
+			setProperties( this, { confirmingInstall: true, errorCode: "SETTINGS_UNSAVED" } );
+			return false;
+		}
+		if ( this.hasStreams && !confirmed ) {
+			set( this, "confirmingInstall", true );
+			this.modal.openModal( "newrelease", this );
+			return false;
+		}
+		setProperties( this, { state: "preparing", confirmingInstall: false, errorCode: "" } );
+		this._recordHistory( "install", "started", { update: this.release } );
+		try {
+			if ( !this._installJob ) {
+				const job = await installer.prepareUpdate({
+					archivePath: this._archivePath,
+					update: this.release,
+					installDir: this.installDir,
+					profileDir: dataPath,
+					storage: LS,
+					identity: this.currentBuild,
+					platform,
+					arch
+				});
+				if ( this.isDestroying || this.isDestroyed ) {
+					if ( installer.discardUpdate ) { await installer.discardUpdate( job ); }
+					return false;
+				}
+				this._installJob = job;
+			}
+			set( this, "state", "installing" );
+			await installer.startInstall( this._installJob, {
+				parentPid: Process.pid,
+				args: [
+					`--user-data-dir=${dirname( dataPath )}`,
+					`--profile-directory=${basename( dataPath )}`
+				]
+			});
+			await this._historyTask;
+			quit();
+			return true;
+		} catch ( error ) {
+			this._recordHistory( "install", "failed", { update: this.release, code: error.code } );
+			if ( this._installJob && installer.discardUpdate ) {
+				const discarded = await installer.discardUpdate( this._installJob )
+					.catch( () => false );
+				if ( discarded === true ) { this._installJob = null; }
+			}
+			const invalidArchive = [ "UPDATE_INTEGRITY", "UPDATE_ARCHIVE", "UPDATE_PACKAGE" ];
+			if ( invalidArchive.includes( error.code ) ) {
+				this._archivePath = null;
+				this._fail( error );
+			} else {
+				this._fail( error, "ready" );
+			}
+			return false;
+		}
+	},
+	async _discardPreparedUpdate() {
+		if ( this._installJob && installer.discardUpdate ) {
+			await installer.discardUpdate( this._installJob );
+		}
+		this._installJob = null;
+		this._archivePath = null;
+	},
+	_fail( error, state = "error" ) {
+		if ( this.isDestroying || this.isDestroyed ) { return; }
+		setProperties( this, { state, errorCode: error && error.code || "UNKNOWN" } );
+	},
+	_scheduleStartupConfirmation() {
+		if ( this._confirmationScheduled || !Process.env.STGUI_UPDATE_JOB ) { return; }
+		this._confirmationScheduled = true;
+		const settingsReady = this.settings.content ? Promise.resolve()
+			: new Promise( resolve => this.settings.one( "initialized", resolve ) );
+		const routeReady = this.router.currentRouteName ? Promise.resolve()
+			: new Promise( resolve => this.router.one( "routeDidChange", resolve ) );
+		Promise.all([ settingsReady, routeReady ])
+			.then( () => scheduleOnce( "afterRender", this, () => {
+				if ( this.isDestroying || this.isDestroyed ) { return; }
+				this._confirmStartup().catch( error => this._fail( error ) );
+			}) )
+			.catch( error => this._fail( error ) );
+	},
+	async _confirmStartup() {
+		const confirmed = await installer.confirmStartup({
+			installDir: this.installDir,
+			identity: this.currentBuild
+		});
+		if ( confirmed ) {
+			if ( this.model && this.model.failedCommit === this.currentBuild.commit ) {
+				set( this.model, "failedCommit", "" );
+				await this.model.save();
+			}
+			this._recordHistory( "startup", "succeeded" );
+		}
+		return confirmed;
+	},
+	_recordHistory( type, status, { update, commit, code } = {} ) {
+		const identity = update ? update.manifest : this.currentBuild;
+		const event = {
+			type, status, at: Date.now(),
+			commit: commit || identity.commit
+		};
+		if ( event.commit === identity.commit ) {
+			event.version = update ? update.manifest.version : this.currentVersion;
+			event.buildNumber = identity.buildNumber;
+		}
+		if ( update ) { event.tag = update.tag; }
+		if ( code ) { event.code = code; }
+		this._historyTask = Promise.resolve( this._historyTask )
+			.then( () => history.appendHistory( this.historyFile, event ) )
+			.then( entries => {
+				if ( this.isDestroying || this.isDestroyed ) { return; }
+				set( this, "historyEntries", entries );
+			})
+			.catch( () => {
+				if ( this.isDestroying || this.isDestroyed ) { return; }
+				set( this, "historyError", "UPDATE_HISTORY" );
+			});
+		return this._historyTask;
+	},
+	async showHistory() {
+		if ( this.historyBusy ) { return false; }
+		setProperties( this, { historyBusy: true, historyError: "" } );
+		this.modal.openModal( "updater-history", this );
+		try {
+			await this._historyTask;
+			const entries = await history.readHistory( this.historyFile );
+			set( this, "historyEntries", entries );
+			return true;
+		} catch ( error ) {
+			set( this, "historyError", "UPDATE_HISTORY" );
+			return false;
+		} finally {
+			set( this, "historyBusy", false );
+		}
+	},
+	async exportDiagnostics( destination ) {
+		if ( !destination || this.diagnosticsBusy ) { return false; }
+		setProperties( this, {
+			diagnosticsBusy: true, diagnosticsSaved: false, historyError: ""
+		});
+		try {
+			await this._historyTask;
+			const entries = await history.readHistory( this.historyFile );
+			await history.exportDiagnostics( destination, {
+				history: entries,
+				currentBuild: {
+					version: this.currentVersion,
+					commit: this.currentBuild.commit,
+					buildNumber: this.currentBuild.buildNumber,
+					commitTime: this.currentBuild.commitTime
+				},
+				platform, arch
+			});
+			set( this, "diagnosticsSaved", true );
+			return true;
+		} catch ( error ) {
+			set( this, "historyError", "UPDATE_DIAGNOSTICS" );
+			return false;
+		} finally {
+			set( this, "diagnosticsBusy", false );
+		}
+	},
+	_getRecord() {
+		if ( this._recordPromise ) { return this._recordPromise; }
+		this._recordPromise = this._loadRecord().catch( error => {
+			this._recordPromise = null;
+			throw error;
+		});
+		return this._recordPromise;
+	},
+	async _loadRecord() {
 		const { store, version } = this;
-
-		/** @type {Versioncheck} */
-		let record = null;
+		let record;
 		let existinguser = false;
-
 		try {
 			record = await store.findRecord( "versioncheck", 1 );
-			// versioncheck record found: existing user
 			existinguser = true;
-
-		} catch ( e ) {
-			// unload automatically created record and create a new one instead
+		} catch ( error ) {
 			record = store.peekRecord( "versioncheck", 1 );
-			/* istanbul ignore next */
-			if ( record ) {
-				store.unloadRecord( record );
-			}
-
+			if ( record ) { store.unloadRecord( record ); }
 			record = store.createRecord( "versioncheck", { id: 1, version } );
 			await record.save();
 		}
-
 		set( this, "model", record );
-
 		return existinguser;
 	},
-
 	async _showDebugMessage() {
-		if ( !isDebug || isDevelopment ) { return; }
-
-		const { model } = this;
-		if ( Date.now() < model.showdebugmessage ) { return; }
-
-		await this.modal.promiseModal( "debug", { buildVersion, displayName }, null, 1000 );
-		set( model, "showdebugmessage", Date.now() + showDebugMessage );
-		await model.save();
+		if ( !isDebug || isDevelopment || Date.now() < this.model.showdebugmessage ) { return; }
+		await this.modal.promiseModal( "debug", {
+			buildVersion: metadata.version,
+			displayName
+		}, null, 1000 );
+		set( this.model, "showdebugmessage", Date.now() + showDebugMessage );
+		await this.model.save();
 	},
-
-	/**
-	 * @param {boolean} existinguser
-	 * @return {Promise}
-	 */
 	async _check( existinguser ) {
 		if ( !existinguser ) {
-			// show first run modal dialog
 			this._openModalAndCheckForNewRelease( "firstrun" );
 			return;
 		}
-
 		const { model, version } = this;
-		// is previous version string empty or lower than current version?
 		if ( !model.version || semverLt( model.version, version ) ) {
-			// NEW version -> update record
 			set( model, "version", version );
 			await model.save();
-
-			// don't show changelog modal if versioncheck is enabled
-			// manual upgrades mean that the user has (most likely) seen the changelog already
 			if ( !argv[ ARG_VERSIONCHECK ] ) {
 				this._openModalAndCheckForNewRelease( "changelog" );
 				return;
 			}
 		}
-
-		// go on with new version check if no modal was opened
 		await this._checkForNewRelease();
 	},
-
 	_openModalAndCheckForNewRelease( name ) {
 		this.modal.promiseModal( name, this )
-			.then( () => this._checkForNewRelease() );
+			.then( () => this._checkForNewRelease() )
+			.catch( error => this._fail( error ) );
 	},
-
-	async _checkForNewRelease() {
-		// don't check for new releases if disabled or re-check threshold not yet reached
-		if ( !argv[ ARG_VERSIONCHECK ] || Date.now() < this.model.checkagain ) { return; }
-
-		/** @type {GithubReleases} */
-		const release = await this.store.queryRecord( "github-releases", "latest" );
-		set( this, "release", release );
-
-		if ( !semverLt( this.version, release.version ) ) {
-			return this.ignoreRelease();
-		}
-
-		this.modal.openModal( "newrelease", this );
+	willDestroy() {
+		++this._downloadGeneration;
+		if ( this._downloadController ) { this._downloadController.abort(); }
+		this._super( ...arguments );
 	}
 });

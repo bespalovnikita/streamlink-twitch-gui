@@ -1,0 +1,56 @@
+<p class="updater-current-version">{{t "updater.current-version" version=versioncheck.currentVersion}}</p>
+{{#if versioncheck.currentCommit}}
+	<p class="updater-current-commit">{{t "updater.current-commit" commit=versioncheck.currentCommit}}</p>
+{{/if}}
+<p class="updater-state" role="status" aria-live="polite">{{t versioncheck.statusKey}}</p>
+{{#if versioncheck.release}}
+	<p class="updater-available-version">{{t "updater.available-version" version=versioncheck.release.versionLabel}}</p>
+{{/if}}
+{{#if versioncheck.errorKey}}
+	<p class="updater-error text-danger" role="alert">{{t versioncheck.errorKey}}</p>
+{{/if}}
+{{#if versioncheck.isDownloading}}
+	<progress max="100" value={{versioncheck.progress}}></progress>
+	<p class="updater-progress">{{t "updater.progress" percent=versioncheck.progress}}</p>
+{{/if}}
+<div class="button-list-horizontal">
+	{{#if showCheck}}
+		{{#form-button action=(action "check") disabled=versioncheck.isBusy
+			classNames="btn-default updater-check" icon="fa-refresh"}}
+			{{t "updater.action.check"}}
+		{{/form-button}}
+	{{/if}}
+	{{#if versioncheck.canDownload}}
+		{{#form-button action=(action "download") classNames="btn-success updater-download" icon="fa-download"}}
+			{{t "updater.action.download"}}
+		{{/form-button}}
+	{{/if}}
+	{{#if versioncheck.isDownloading}}
+		{{#form-button action=(action "cancel") classNames="btn-default updater-cancel" icon="fa-times"}}
+			{{t "updater.action.cancel"}}
+		{{/form-button}}
+	{{/if}}
+	{{#if versioncheck.isReady}}
+		{{#form-button action=(action "restart") classNames="btn-success updater-restart" icon="fa-refresh"}}
+			{{t "updater.action.restart"}}
+		{{/form-button}}
+	{{/if}}
+</div>
+{{#if showCheck}}
+	<div class="button-list-horizontal updater-history-actions">
+		{{#form-button action=(action "history") disabled=versioncheck.historyBusy
+			classNames="btn-default updater-history" icon="fa-history"}}
+			{{t "updater.action.history"}}
+		{{/form-button}}
+		{{#form-button action=(action "export") disabled=versioncheck.diagnosticsBusy
+			classNames="btn-default updater-export" icon="fa-save"}}
+			{{t "updater.action.export"}}
+		{{/form-button}}
+	</div>
+	{{#if versioncheck.historyErrorKey}}
+		<p class="updater-history-error text-danger" role="alert">{{t versioncheck.historyErrorKey}}</p>
+	{{/if}}
+	{{#if versioncheck.diagnosticsSaved}}
+		<p class="updater-diagnostics-saved" role="status">{{t "updater.history.exported"}}</p>
+	{{/if}}
+{{/if}}

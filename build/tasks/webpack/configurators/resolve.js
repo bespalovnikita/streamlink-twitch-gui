@@ -7,6 +7,7 @@ const { isTestTarget } = require( "../utils" );
  */
 module.exports = {
 	common( config, grunt, target ) {
+		config.resolve.alias.updater = `${pApp}/updater`;
 		// set the first module resolve path
 		config.resolve.modules.unshift(
 			isTestTarget( target )

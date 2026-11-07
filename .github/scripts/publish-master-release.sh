@@ -21,6 +21,8 @@ if [[ "$(LC_ALL=C sort "${checksums[0]}")" != "$expected_checksums" ]]; then
   exit 1
 fi
 
+node "${BASH_SOURCE[0]%/*}/create-update-manifest.cjs"
+
 version="$(node -p 'require("./package.json").version')"
 tag="v${version}-master.g${GITHUB_SHA}"
 notes_file="$(mktemp)"
@@ -28,6 +30,19 @@ trap 'rm -f "$notes_file"' EXIT
 
 printf 'Предварительная сборка master для Windows x64 и Linux x64.\n\nКоммит: `%s`.\n\nWindows: скачайте архив *-win64.zip, распакуйте и запустите streamlink-twitch-gui.exe.\n\nАрхивы и SHA256 подготовлены из артефактов того же запуска CI после успешных проверок Linux и Windows.\n\nДля просмотра трансляций отдельно установите Streamlink и совместимый видеопроигрыватель.\n' \
   "$GITHUB_SHA" > "$notes_file"
+
+if git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+  previous_tag="$(git describe --tags --match 'v*-master.g*' --exclude "$tag" \
+    --abbrev=0 "${GITHUB_SHA}^" 2>/dev/null || true)"
+  printf '\nИзменения:\n' >> "$notes_file"
+  if [[ -n "$previous_tag" ]]; then
+    git --no-pager log --first-parent --format='- %s (%h)' --max-count=20 \
+      "${previous_tag}..${GITHUB_SHA}" >> "$notes_file"
+  else
+    git --no-pager log --first-parent --format='- %s (%h)' --max-count=10 \
+      "$GITHUB_SHA" >> "$notes_file"
+  fi
+fi
 
 if ! release_sha="$(gh api "repos/${GH_REPO}/commits/${tag}" --jq .sha 2>/dev/null)"; then
   gh api --method POST "repos/${GH_REPO}/git/refs" \
@@ -50,7 +65,8 @@ fi
 
 if [[ "$is_draft" == true ]]; then
   # Only a draft can be resumed; published assets remain unchanged on retries.
-  gh release upload "$tag" "${archives[@]}" "${checksums[@]}" --clobber
+  gh release upload "$tag" "${archives[@]}" "${checksums[@]}" \
+    dist/update.json dist/update.json.sig --clobber
   gh release edit "$tag" --draft=false --prerelease --latest=false
 elif [[ "$is_draft" != false ]]; then
   echo "Unexpected release state" >&2

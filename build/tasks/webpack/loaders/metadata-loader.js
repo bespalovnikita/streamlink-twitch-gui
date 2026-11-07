@@ -1,9 +1,11 @@
 module.exports = function() {
 	this.cacheable( false );
 
-	const { version, package: pkg, built } = this.getOptions();
+	const { version, package: pkg, built, identity = {} } = this.getOptions();
+	this.emitFile( "build-info.json", JSON.stringify( identity ) );
 
 	return JSON.stringify({
+		...identity,
 		version,
 		built,
 		author: pkg.author,

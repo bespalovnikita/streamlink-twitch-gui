@@ -1,25 +1,48 @@
 <div>
-	{{#modal-header}}
-		{{t "modal.newrelease.header" version=modalContext.version}}
-	{{/modal-header}}
+	{{#modal-header}}{{t "updater.title"}}{{/modal-header}}
 	{{#modal-body}}
-		{{t "modal.newrelease.body" version=modalContext.release.version}}
+		{{#if modalContext.confirmingInstall}}
+			{{#if modalContext.hasStreams}}
+				<p class="updater-stream-warning">{{t "updater.warning.streams"}}</p>
+			{{/if}}
+			{{#if modalContext.hasUnsavedSettings}}
+				<p class="updater-settings-warning">{{t "updater.warning.settings"}}</p>
+			{{/if}}
+		{{else}}
+			{{update-status showCheck=false}}
+			{{#if modalContext.hasFailedRelease}}
+				<p class="updater-failed-warning text-danger">{{t "updater.warning.failed-release"}}</p>
+			{{/if}}
+			{{#if modalContext.release}}
+				<h4>{{t "updater.notes.title"}}</h4>
+				{{#if modalContext.release.releaseNotes}}
+					<div class="updater-release-notes">{{modalContext.release.releaseNotes}}</div>
+				{{else}}
+					<p class="updater-release-notes-empty">{{t "updater.notes.empty"}}</p>
+				{{/if}}
+			{{/if}}
+		{{/if}}
 	{{/modal-body}}
 	{{#modal-footer classNames="button-list-horizontal"}}
-		{{#form-button
-			action=(action "download")
-			classNames="btn-success"
-			icon="fa-download"
-			iconanim=true
-		}}
-			{{t "modal.newrelease.action.download"}}
-		{{/form-button}}
-		{{#form-button
-			action=(action "ignore")
-			classNames="btn-danger"
-			icon="fa-times"
-		}}
-			{{t "modal.newrelease.action.ignore"}}
-		{{/form-button}}
+		{{#if modalContext.confirmingInstall}}
+			{{#form-button action=(action "back") classNames="btn-default updater-back"}}
+				{{t "updater.action.back"}}
+			{{/form-button}}
+			{{#unless modalContext.hasUnsavedSettings}}
+				{{#form-button action=(action "confirm") classNames="btn-danger updater-confirm"}}
+					{{t "updater.action.confirm-restart"}}
+				{{/form-button}}
+			{{/unless}}
+		{{else}}
+			{{#form-button action=(action "later") classNames="btn-default updater-later"}}
+				{{t "updater.action.later"}}
+			{{/form-button}}
+			{{#if modalContext.release}}
+				{{#form-button action=(action "ignore") disabled=modalContext.isBusy
+					classNames="btn-default updater-skip"}}
+					{{t "updater.action.skip"}}
+				{{/form-button}}
+			{{/if}}
+		{{/if}}
 	{{/modal-footer}}
 </div>

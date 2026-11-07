@@ -1,6 +1,7 @@
 const { resolve } = require( "path" );
 const { pRoot, pConfig, pApp, pTest } = require( "../paths" );
 const Date = require( "../../common/date" );
+const buildIdentity = require( "../../common/build-identity" );
 
 
 /**
@@ -44,6 +45,7 @@ module.exports = {
 					options: {
 						version: grunt.config( "version" ),
 						package: grunt.config( "package" ),
+						identity: buildIdentity(),
 						built: new Date().toISOString()
 					}
 				}

@@ -1,7 +1,8 @@
 const { test } = require( "node:test" );
 const assert = require( "node:assert/strict" );
 const { spawnSync } = require( "node:child_process" );
-const { createHash } = require( "node:crypto" );
+const { createHash, generateKeyPairSync, verify } = require( "node:crypto" );
+const { gzipSync } = require( "node:zlib" );
 const fs = require( "node:fs" );
 const os = require( "node:os" );
 const path = require( "node:path" );
@@ -17,6 +18,58 @@ const releaseUrl = `https://github.com/${repo}/releases/tag/${tag}`;
 const archiveName = "streamlink-twitch-gui-v2.5.3-linux64.tar.gz";
 const windowsName = "streamlink-twitch-gui-v2.5.3-win64.zip";
 const checksumName = "streamlink-twitch-gui-v2.5.3-checksums.txt";
+
+function archiveContent( platform ) {
+	const data = Buffer.from( platform );
+	const name = Buffer.from( "streamlink-twitch-gui/example.txt" );
+	if ( platform === "linux64" ) {
+		const header = Buffer.alloc( 512 );
+		name.copy( header );
+		header.write( "0000644\0", 100 );
+		header.write( "0000000\0", 108 );
+		header.write( "0000000\0", 116 );
+		header.write( `${data.length.toString( 8 ).padStart( 11, "0" )}\0`, 124 );
+		header.write( "00000000000\0", 136 );
+		header.fill( 32, 148, 156 );
+		header[156] = 48;
+		header.write( "ustar\0", 257 );
+		header.write( "00", 263 );
+		const sum = header.reduce( ( total, byte ) => total + byte, 0 );
+		header.write( `${sum.toString( 8 ).padStart( 6, "0" )}\0 `, 148 );
+		return gzipSync( Buffer.concat( [ header, data,
+			Buffer.alloc( ( 512 - data.length % 512 ) % 512 + 1024 ) ] ) );
+	}
+	let crc = 0xffffffff;
+	for ( const byte of data ) {
+		crc ^= byte;
+		for ( let bit = 0; bit < 8; bit++ ) {
+			crc = crc & 1 ? ( crc >>> 1 ) ^ 0xedb88320 : crc >>> 1;
+		}
+	}
+	crc = ( crc ^ 0xffffffff ) >>> 0;
+	const local = Buffer.alloc( 30 );
+	local.writeUInt32LE( 0x04034b50 );
+	local.writeUInt16LE( 20, 4 );
+	local.writeUInt32LE( crc, 14 );
+	local.writeUInt32LE( data.length, 18 );
+	local.writeUInt32LE( data.length, 22 );
+	local.writeUInt16LE( name.length, 26 );
+	const central = Buffer.alloc( 46 );
+	central.writeUInt32LE( 0x02014b50 );
+	central.writeUInt16LE( 20, 4 );
+	central.writeUInt16LE( 20, 6 );
+	central.writeUInt32LE( crc, 16 );
+	central.writeUInt32LE( data.length, 20 );
+	central.writeUInt32LE( data.length, 24 );
+	central.writeUInt16LE( name.length, 28 );
+	const end = Buffer.alloc( 22 );
+	end.writeUInt32LE( 0x06054b50 );
+	end.writeUInt16LE( 1, 8 );
+	end.writeUInt16LE( 1, 10 );
+	end.writeUInt32LE( central.length + name.length, 12 );
+	end.writeUInt32LE( local.length + name.length + data.length, 16 );
+	return Buffer.concat( [ local, name, data, central, name, end ] );
+}
 
 const fakeGh = `#!/usr/bin/env node
 const fs = require( "node:fs" );
@@ -82,13 +135,36 @@ function fixture( context, initialState = {}, options = {} ) {
 	[ bin, dist, temporary ].forEach( folder => fs.mkdirSync( folder ) );
 	const manifest = path.join( directory, "package.json" );
 	fs.writeFileSync( manifest, JSON.stringify({ version: "2.5.3" }) );
+	const signingKeys = generateKeyPairSync( "ed25519" );
+	const signingKeyId = "test-master";
+	const privateKey = signingKeys.privateKey.export({ type: "pkcs8", format: "pem" });
+	const configDirectory = path.join( directory, "src/config" );
+	fs.mkdirSync( configDirectory, { recursive: true } );
+	fs.writeFileSync( path.join( configDirectory, "update.json" ), JSON.stringify({
+		signingKeyId,
+		trustedKeys: {
+			[ signingKeyId ]: signingKeys.publicKey.export({ type: "spki", format: "pem" })
+		}
+	}) );
+	const application = path.join( directory, "work/windows-app" );
+	fs.mkdirSync( application, { recursive: true } );
+	fs.writeFileSync( path.join( application, "build-info.json" ), JSON.stringify({
+		schema: 1,
+		channel: "master",
+		appName: "streamlink-twitch-gui",
+		repository: repo,
+		version: "2.5.3",
+		commit: sha,
+		commitTime: 1704067200,
+		buildNumber: 23
+	}) );
 	fs.writeFileSync( path.join( bin, "gh" ), fakeGh, { mode: 0o755 } );
-	const archive = Buffer.from( "Fake Linux archive for release publishing tests\n" );
+	const archive = archiveContent( "linux64" );
 	const digest = createHash( "sha256" ).update( archive ).digest( "hex" );
 	fs.writeFileSync( path.join( dist, archiveName ), archive );
 	let checksums = `${digest}  ${archiveName}\n`;
 	if ( options.includeWindows !== false ) {
-		const windows = Buffer.from( "Fake Windows archive for release publishing tests\n" );
+		const windows = archiveContent( "win64" );
 		const windowsDigest = createHash( "sha256" ).update( windows ).digest( "hex" );
 		fs.writeFileSync( path.join( dist, windowsName ), windows );
 		checksums += `${windowsDigest}  ${windowsName}\n`;
@@ -111,6 +187,9 @@ function fixture( context, initialState = {}, options = {} ) {
 		directory,
 		dist,
 		summaryFile,
+		privateKey,
+		signingKeyId,
+		publicKey: signingKeys.publicKey,
 		state: () => JSON.parse( fs.readFileSync( stateFile, "utf8" ) ),
 		updateState: update => fs.writeFileSync( stateFile, JSON.stringify({
 			...JSON.parse( fs.readFileSync( stateFile, "utf8" ) ), ...update
@@ -128,6 +207,8 @@ function fixture( context, initialState = {}, options = {} ) {
 				TMPDIR: temporary,
 				GH_REPO: repo,
 				GITHUB_SHA: sha,
+				GITHUB_RUN_NUMBER: "23",
+				UPDATER_ED25519_PRIVATE_KEY: privateKey,
 				GITHUB_STEP_SUMMARY: summaryFile,
 				FAKE_GH_STATE: stateFile,
 				FAKE_GH_CALLS: callsFile,
@@ -168,11 +249,23 @@ function expectPublication( files, expectedActions ) {
 	const upload = changes.find( ({ args }) => args[ 1 ] === "upload" );
 	assert.ok( upload.args.includes( "--clobber" ), "Retries draft assets safely" );
 	assert.deepEqual( upload.args.slice( 3 ).filter( arg => arg !== "--clobber" ).sort(), [
-		`dist/${archiveName}`, `dist/${windowsName}`, `dist/${checksumName}`
-	].sort(), "Uploads the Linux archive, Windows archive and shared checksums" );
-	const verify = calls.findIndex( ({ args }) => args[ 0 ] === "api" );
-	assert.ok( verify >= 0 && verify < calls.indexOf( upload ), "Verifies the tag before upload" );
-	assert.deepEqual( calls[ verify ].args, [
+		`dist/${archiveName}`, `dist/${windowsName}`, `dist/${checksumName}`,
+		"dist/update.json", "dist/update.json.sig"
+	].sort(), "Uploads both archives, shared checksums, the manifest and its signature" );
+	const manifestBytes = fs.readFileSync( path.join( files.dist, "update.json" ) );
+	const signature = JSON.parse( fs.readFileSync( path.join( files.dist, "update.json.sig" ) ) );
+	assert.equal( signature.keyId, files.signingKeyId );
+	assert.equal( signature.algorithm, "Ed25519" );
+	assert.equal( verify( null, manifestBytes, files.publicKey,
+		Buffer.from( signature.signatureBase64, "base64" ) ), true );
+	const manifest = JSON.parse( manifestBytes );
+	for ( const platform of [ "win64", "linux64" ] ) {
+		assert.ok( manifest.platforms[ platform ].unpackedSize > 0 );
+	}
+	const tagVerification = calls.findIndex( ({ args }) => args[ 0 ] === "api" );
+	assert.ok( tagVerification >= 0 && tagVerification < calls.indexOf( upload ),
+		"Verifies the tag before upload" );
+	assert.deepEqual( calls[ tagVerification ].args, [
 		"api", `repos/${repo}/commits/${tag}`, "--jq", ".sha"
 	] );
 	const publish = changes.find( ({ args }) => args[ 1 ] === "edit" );
@@ -201,6 +294,36 @@ test( "Creates a draft, verifies its commit, uploads assets, then publishes", co
 	assert.equal( create.args[ create.args.indexOf( "--target" ) + 1 ], sha );
 	assert.ok( create.notes.includes( sha ), "Release notes identify the tested commit" );
 });
+
+for ( const previous of [ "", `v2.5.3-master.g${otherSha}` ] ) {
+	const scope = previous ? "since the previous release" : "to the first release";
+	test( `Adds commit descriptions ${scope}`,
+		context => {
+			const files = fixture( context );
+			fs.writeFileSync( path.join( files.directory, "bin/git" ), `#!/usr/bin/env node
+const assert = require("node:assert/strict");
+const args = process.argv.slice(2);
+const previous = process.env.FAKE_PREVIOUS_TAG;
+if (args[0] === "rev-parse") {
+	assert.deepEqual(args, ["rev-parse", "--is-inside-work-tree"]);
+} else if (args[0] === "describe") {
+	assert.ok(args.includes("${sha}^"));
+	if (!previous) { process.exit(1); }
+	process.stdout.write(previous);
+} else {
+	assert.deepEqual(args, ["--no-pager", "log", "--first-parent", "--format=- %s (%h)",
+		previous ? "--max-count=20" : "--max-count=10",
+		previous ? previous + "..${sha}" : "${sha}"]);
+	process.stdout.write("- Fix Unicode profile paths (abc1234)\\n");
+}
+`, { mode: 0o755 } );
+			expectSuccess( files.run( script, { FAKE_PREVIOUS_TAG: previous } ) );
+			const create = mutations( files.calls() ).find( ({ args }) => args[ 1 ] === "create" );
+			assert.ok( create.notes.includes( "Изменения:" ) );
+			assert.ok( create.notes.includes( "Fix Unicode profile paths (abc1234)" ) );
+			expectPublication( files, [ "create-tag", "create", "upload", "edit" ] );
+		} );
+}
 
 test( "Leaves an already published release and its assets unchanged", context => {
 	const files = fixture( context, { exists: true, isDraft: false } );
@@ -276,6 +399,31 @@ test( "Rejects a checksum manifest without the Windows archive hash", context =>
 	assert.deepEqual( files.calls(), [], "Requires checksum coverage for both platforms" );
 });
 
+for ( const key of [ "", "not a signing key" ] ) {
+	test( `Does not contact GitHub when the signing key is ${key ? "invalid" : "missing"}`,
+		context => {
+			const files = fixture( context );
+			const result = files.run( script, { UPDATER_ED25519_PRIVATE_KEY: key } );
+			expectFailure( result );
+			assert.deepEqual( files.calls(), [], "Signs before any GitHub request" );
+			assert.equal( fs.existsSync( path.join( files.dist, "update.json.sig" ) ), false );
+			assert.equal( ( result.stdout + result.stderr ).includes( files.privateKey ), false );
+			assert.equal( ( result.stdout + result.stderr ).includes( "BEGIN PRIVATE KEY" ),
+				false );
+		} );
+}
+
+test( "Rejects a private key that does not match the app's pinned public key", context => {
+	const files = fixture( context );
+	const otherKey = generateKeyPairSync( "ed25519" ).privateKey
+		.export({ type: "pkcs8", format: "pem" });
+	const result = files.run( script, { UPDATER_ED25519_PRIVATE_KEY: otherKey } );
+	expectFailure( result );
+	assert.deepEqual( files.calls(), [], "Never creates a release signed by an untrusted key" );
+	assert.equal( ( result.stdout + result.stderr ).includes( otherKey ), false );
+	assert.equal( ( result.stdout + result.stderr ).includes( "BEGIN PRIVATE KEY" ), false );
+});
+
 function windowsFixture( context, withExecutable = true ) {
 	const files = fixture( context, {}, { includeWindows: false } );
 	const application = path.join( files.directory, "work/windows-app" );
@@ -310,6 +458,7 @@ test( "Packages the Windows app with hidden files and checksums for both platfor
 	assert.deepEqual( entries.sort(), [
 		"streamlink-twitch-gui/",
 		"streamlink-twitch-gui/.portable-config",
+		"streamlink-twitch-gui/build-info.json",
 		"streamlink-twitch-gui/streamlink-twitch-gui.exe"
 	].sort(), "Uses the application directory prefix and preserves hidden files" );
 	assert.equal( runArchiveTool( files, "unzip", [

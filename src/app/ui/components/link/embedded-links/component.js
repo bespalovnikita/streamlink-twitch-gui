@@ -8,6 +8,7 @@ export default Component.extend({
 	layout,
 
 	classNames: [ "embedded-links-component" ],
+	tabindex: -1,
 
 	content: computed( "text", function() {
 		const text = get( this, "text" );

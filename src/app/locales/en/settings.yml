@@ -24,9 +24,7 @@ main:
     homepage:
         title: Home page
         description: Menu to load first or when clicking the logo.
-        text:
-            first: See the menu bar in the top right corner of each page.
-            second: Click the home button to make it the new home page.
+        text: "On a streams, games, or followed page, select “Set as homepage”."
     theme:
         title: Theme
         description: Select a GUI color theme.

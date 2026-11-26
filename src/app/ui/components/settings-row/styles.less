@@ -125,3 +125,33 @@
 		}
 	}
 }
+
+.content-settings > fieldset > .settings-row-component {
+	& + & {
+		padding-top: .875rem;
+		border-top: 1px solid var(--ui-border);
+	}
+
+	> :first-child {
+		> :first-child {
+			font-weight: 600;
+		}
+
+		> :not(:first-child) {
+			font-size: .875rem;
+			overflow-wrap: anywhere;
+		}
+	}
+
+	&:not(:hover) > :first-child > :not(:first-child),
+	> :first-child > :not(:first-child) {
+		&, i.fa {
+			color: var(--ui-text-muted);
+			transition: none;
+		}
+	}
+
+	> :last-child {
+		min-width: 0;
+	}
+}

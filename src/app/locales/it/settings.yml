@@ -24,9 +24,7 @@ main:
     homepage:
         title: Pagina iniziale
         description: Menù da caricare quando si clicca su logo.
-        text:
-            first: Mostra la barra dei menu nell'angolo in alto a destra di ogni pagina.
-            second: Click sul pulsante Home per renderla la nuova home page.
+        text: "In una pagina di stream, giochi o canali seguiti, seleziona «Imposta come pagina iniziale»."
     theme:
         title: Tema
         description: Seleziona il colore dell'interfaccia

@@ -1,39 +1,102 @@
-<button type="button" class="btn-nav fa fa-chevron-left" {{action "back"}}></button>
-<button type="button" class="btn-nav fa fa-chevron-right" {{action "forward"}}></button>
-<button type="button" class="btn-nav fa fa-refresh" {{action "refresh"}}></button>
-{{input type="search" placeholder=(t "components.search-bar.placeholder") value=query required=true enter=(action "submit")}}
-<button type="button" class="btn-small btn-context-valid fa fa-times" {{action "clear"}}></button>
-<button type="button" class="btn-small btn-context-valid fa fa-search" {{action "submit"}}></button>
-<button type="button" class="btn-small btn-dropdown fa fa-chevron-down" {{action "toggleDropdown"}}></button>
-<div class="searchbar-dropdown {{unless showDropdown 'hidden'}}">
-	<section class="filters">
-		<div>{{t "components.search-bar.filter"}}</div>
-		{{#radio-buttons
-			name="searchfilters"
-			value=filter
-			content=filters
-			as |item|
-		}}
-			{{#item.button classNames="default btn radio-buttons-item-searchbar-filter"}}
-				{{t (concat "components.search-bar.filters." item.value)}}
-			{{/item.button}}
-		{{/radio-buttons}}
-	</section>
-	{{#if model.length}}
-		<section class="recent">
-			<header>
-				<div>{{t "components.search-bar.recent"}}</div>
-				<div class="clear" {{action "clearHistory"}}><i class="fa fa-trash-o"></i></div>
-			</header>
-			<ul class="list-unstyled">
-				{{#each content as |history|}}
-					<li {{action "searchHistory" history}}>
-						<div class="filter">{{t (concat "components.search-bar.filters." history.filter)}}</div>
-						<div class="query">{{history.query}}</div>
-						<div class="date">{{time-from-now history.date interval=60000}}</div>
-					</li>
+<nav class="search-navigation" aria-label="{{t 'settings.hotkeys.navigation.title'}}">
+	<button
+		type="button"
+		class="btn-nav fa fa-chevron-left"
+		title="{{t 'settings.hotkeys.navigation.actions.historyBack'}}"
+		aria-label="{{t 'settings.hotkeys.navigation.actions.historyBack'}}"
+		{{action "back"}}
+	></button>
+	<button
+		type="button"
+		class="btn-nav fa fa-chevron-right"
+		title="{{t 'settings.hotkeys.navigation.actions.historyForward'}}"
+		aria-label="{{t 'settings.hotkeys.navigation.actions.historyForward'}}"
+		{{action "forward"}}
+	></button>
+	<button
+		type="button"
+		class="btn-nav fa fa-refresh"
+		title="{{t 'settings.hotkeys.navigation.actions.refresh'}}"
+		aria-label="{{t 'settings.hotkeys.navigation.actions.refresh'}}"
+		{{action "refresh"}}
+	></button>
+</nav>
+<div class="search-box">
+	<form role="search" class="search-field" onsubmit={{action "submit"}}>
+		<input
+			type="search"
+			placeholder="{{t 'components.search-bar.placeholder'}}"
+			aria-label="{{t 'components.search-bar.placeholder'}}"
+			value={{query}}
+			oninput={{action "updateQuery"}}
+		>
+		{{#if query}}
+			<button
+				type="button"
+				class="fa fa-times"
+				title="{{t 'components.search-bar.clear'}}"
+				aria-label="{{t 'components.search-bar.clear'}}"
+				{{action "clear"}}
+			></button>
+		{{/if}}
+		<button
+			type="submit"
+			class="btn-search fa fa-search"
+			title="{{t 'components.search-bar.placeholder'}}"
+			aria-label="{{t 'components.search-bar.placeholder'}}"
+		></button>
+		<button
+			type="button"
+			class="btn-dropdown fa fa-sliders {{unless (is-equal filter 'all') 'has-filter'}}"
+			title="{{t 'components.search-bar.filter'}}"
+			aria-label="{{t 'components.search-bar.filter'}}"
+			aria-controls="{{elementId}}-filters"
+			aria-expanded="{{if showDropdown 'true' 'false'}}"
+			{{action "toggleDropdown"}}
+		></button>
+	</form>
+	<div id="{{elementId}}-filters" class="searchbar-dropdown {{unless showDropdown 'hidden'}}">
+		<fieldset class="search-filters">
+			<legend>{{t "components.search-bar.filter"}}</legend>
+			<div>
+				{{#each filters as |option|}}
+					<label class="search-filter-option">
+						<input
+							type="radio"
+							name="{{elementId}}-filter"
+							value={{option.id}}
+							checked={{is-equal filter option.id}}
+							onchange={{action "selectFilter" option.id}}
+						>
+						<span>{{t (concat "components.search-bar.filters." option.id)}}</span>
+					</label>
 				{{/each}}
-			</ul>
-		</section>
-	{{/if}}
+			</div>
+		</fieldset>
+		{{#if model.length}}
+			<section class="recent">
+				<header>
+					<div>{{t "components.search-bar.recent"}}</div>
+					<button
+						type="button"
+						class="clear fa fa-trash-o"
+						title="{{t 'components.search-bar.clear-history'}}"
+						aria-label="{{t 'components.search-bar.clear-history'}}"
+						{{action "clearHistory"}}
+					></button>
+				</header>
+				<ul class="list-unstyled">
+					{{#each content as |history|}}
+						<li>
+							<button type="button" {{action "searchHistory" history}}>
+								<span class="query">{{history.query}}</span>
+								<span class="filter">{{t (concat "components.search-bar.filters." history.filter)}}</span>
+								<span class="date">{{time-from-now history.date interval=60000}}</span>
+							</button>
+						</li>
+					{{/each}}
+				</ul>
+			</section>
+		{{/if}}
+	</div>
 </div>

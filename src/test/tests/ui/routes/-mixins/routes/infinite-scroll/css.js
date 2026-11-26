@@ -1,5 +1,8 @@
 import { module, test } from "qunit";
 import sinon from "sinon";
+import { getNeededColumns, getNeededRows } from "ui/routes/-mixins/routes/infinite-scroll/css";
+import "ui/components/list/game-item/styles.less";
+import "ui/components/list/stream-item/styles.less";
 
 // noinspection ES6CheckImport
 import infiniteScrollMixinCssInjector
@@ -177,6 +180,19 @@ module( "ui/routes/-mixins/routes/infinite-scroll/css", function( hooks ) {
 		this.querySelectorStub.returns( null );
 		assert.strictEqual( getNeededRows( ".foo" ), 11, "11 100px rows at 1000" );
 		assert.strictEqual( getNeededRows( ".baz" ), 6, "6 200px rows at 1000" );
+	});
+});
+
+
+module( "ui/routes/-mixins/routes/infinite-scroll/card CSS", function() {
+	test( "Card styles support paging at the minimum window width", function( assert ) {
+		const stream = ".stream-item-component";
+		const game = ".game-item-component";
+
+		assert.strictEqual( getNeededColumns( stream, 960 ), 3 );
+		assert.strictEqual( getNeededColumns( game, 960 ), 4 );
+		assert.ok( getNeededRows( stream ) >= 1, "Reads the compiled stream row height" );
+		assert.ok( getNeededRows( game ) >= 1, "Reads the compiled game row height" );
 	});
 });
 

@@ -24,9 +24,7 @@ main:
     homepage:
         title: Startseite
         description: Welches Menü zuerst oder beim Anklicken des Logos geladen wird.
-        text:
-            first: Siehe die Menüleiste oben rechts auf jeder Seite.
-            second: Klicke auf den Home-Button, um sie zur Startseite zu machen.
+        text: "Wähle auf einer Seite für Streams, Spiele oder gefolgte Kanäle „Als Startseite setzen“."
     theme:
         title: Farbgebung
         description: Wähle die Farbe des GUIs.

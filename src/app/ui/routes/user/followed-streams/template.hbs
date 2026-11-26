@@ -1,9 +1,7 @@
 <main class="content content-user content-user-followed-streams">
 	<header>
 		<h2>{{t "routes.user.followedStreams.header"}}</h2>
-		{{#quick-bar}}
-			{{quick-bar-homepage}}
-		{{/quick-bar}}
+		{{quick-bar-homepage}}
 	</header>
 	{{#content-list model as |item isNewItem isDuplicateItem|}}
 		{{stream-item

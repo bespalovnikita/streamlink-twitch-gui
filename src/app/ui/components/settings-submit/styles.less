@@ -19,6 +19,31 @@
 	}
 }
 
+.content-settings > .settings-submit-component {
+	position: sticky;
+	bottom: 0;
+	z-index: 2;
+	justify-content: flex-end;
+	gap: .5rem;
+	margin-top: auto;
+	padding: .5rem;
+	overflow: visible;
+
+	> .form-button-component {
+		margin: 0;
+	}
+
+	&:not(.faded) {
+		border-radius: .75rem .75rem 0 0;
+		background: var(--ui-surface);
+		box-shadow: 0 -.25rem 1rem var(--ui-shadow);
+	}
+
+	&.faded {
+		pointer-events: none;
+	}
+}
+
 @-webkit-keyframes settings-submit-component-buttons {
 	0%, 99.9999% {
 		visibility: visible;

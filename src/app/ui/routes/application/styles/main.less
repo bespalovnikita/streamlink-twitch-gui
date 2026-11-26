@@ -18,6 +18,16 @@ body {
 	cursor: default;
 
 	.theme({
+		--ui-surface: @theme-ui-surface;
+		--ui-surface-muted: @theme-ui-surface-muted;
+		--ui-border: @theme-ui-border;
+		--ui-control-border: @theme-ui-control-border;
+		--ui-text: @theme-ui-text;
+		--ui-text-muted: @theme-ui-text-muted;
+		--ui-accent: @theme-ui-accent;
+		--ui-selected: @theme-ui-selected;
+		--ui-focus: @theme-ui-focus;
+		--ui-shadow: @theme-ui-shadow;
 		.theme-color-and-background( @theme-text-color, @theme-background );
 	});
 }
@@ -39,6 +49,7 @@ body > div {
 
 	> .wrapper {
 		flex: 1;
+		min-height: 0;
 	}
 }
 
@@ -77,7 +88,7 @@ h6 { font-size: .667rem; }
 h1, h2, h3, h4, h5, h6 {
 	margin-bottom: .75em;
 	font-family: @font-name;
-	font-weight: lighter;
+	font-weight: 500;
 
 	.theme({
 		.theme-mix-color( @theme-headline-color, @theme-background );

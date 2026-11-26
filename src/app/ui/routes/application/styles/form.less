@@ -1,6 +1,7 @@
 
-:focus {
-	outline: 0 !important;
+:focus-visible {
+	outline: 2px solid var(--ui-focus, @color-twitch-purple);
+	outline-offset: 2px;
 }
 
 
@@ -33,10 +34,6 @@ input[type="number"] {
 			.theme-mix-color( @theme-input-color-placeholder, @theme-input-background );
 		}
 	});
-
-	&::-webkit-input-placeholder {
-		font-style: italic;
-	}
 
 	&.form-control + .input-group-btn > .btn {
 		min-width: 3em;

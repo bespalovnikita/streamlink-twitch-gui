@@ -24,9 +24,7 @@ main:
     homepage:
         title: 首頁
         description: 點擊左上方 Logo 及程式打開後第一個顯示的頁面
-        text:
-            first: 每一頁的右上方
-            second: 點擊首頁圖示來設定為首頁
+        text: "在實況、遊戲或追隨頁面選取「設為首頁」。"
     theme:
         title: 佈景主題
         description: 選擇一個介面主題

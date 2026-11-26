@@ -24,9 +24,7 @@ main:
     homepage:
         title: Página de inicio
         description: Menú para cargar al inicio o al hacer click en el logo.
-        text:
-            first: Vea la barra de menú en la esquina superior derecha de cada página.
-            second: Haga click en el botón de inicio para convertirlo en la nueva página de inicio.
+        text: "En una página de transmisiones, juegos o canales seguidos, selecciona «Establecer página de inicio»."
     theme:
         title: Tema
         description: Seleccione un tema para la interfaz.

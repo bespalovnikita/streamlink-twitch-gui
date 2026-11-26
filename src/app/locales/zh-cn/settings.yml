@@ -24,9 +24,7 @@ main:
     homepage:
         title: 主页
         description: 初次打开或点击logo时加载的页面。
-        text:
-            first: 在每个页面的右上角，
-            second: 点击主页按钮将其设为主页。
+        text: "在直播、游戏或关注页面选择“设为主页”。"
     theme:
         title: 主题
         description: 选择一个界面主题。

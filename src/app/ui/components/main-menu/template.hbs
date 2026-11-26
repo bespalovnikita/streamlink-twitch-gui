@@ -1,17 +1,17 @@
-<nav>
+<nav aria-label={{t "settings.hotkeys.navigation.title"}}>
 	<h3>{{t "components.main-menu.browse.header"}}</h3>
 	<ul>
-		<li>{{#link-to "games"}}{{t "components.main-menu.browse.games"}}{{/link-to}}</li>
-		<li>{{#link-to "streams"}}{{t "components.main-menu.browse.streams"}}{{/link-to}}</li>
+		<li>{{#link-to "games" tabindex=0 markCurrent=true}}<i class="fa fa-th-large" aria-hidden="true"></i><span>{{t "components.main-menu.browse.games"}}</span>{{/link-to}}</li>
+		<li>{{#link-to "streams" tabindex=0 markCurrent=true}}<i class="fa fa-play-circle-o" aria-hidden="true"></i><span>{{t "components.main-menu.browse.streams"}}</span>{{/link-to}}</li>
 	</ul>
 	<h3>{{t "components.main-menu.followed.header"}}</h3>
 	<ul>
-		<li>{{#link-to "user.followedStreams"}}{{t "components.main-menu.followed.streams"}}{{/link-to}}</li>
-		<li>{{#link-to "user.followedChannels"}}{{t "components.main-menu.followed.channels"}}{{/link-to}}</li>
+		<li>{{#link-to "user.followedStreams" tabindex=0 markCurrent=true}}<i class="fa fa-play-circle-o" aria-hidden="true"></i><span>{{t "components.main-menu.followed.streams"}}</span>{{/link-to}}</li>
+		<li>{{#link-to "user.followedChannels" tabindex=0 markCurrent=true}}<i class="fa fa-users" aria-hidden="true"></i><span>{{t "components.main-menu.followed.channels"}}</span>{{/link-to}}</li>
 	</ul>
 	<h3>{{t "components.main-menu.misc.header"}}</h3>
 	<ul>
-		<li>{{#link-to "settings"}}{{t "components.main-menu.misc.settings"}}{{/link-to}}</li>
-		<li>{{#link-to "about"}}{{t "components.main-menu.misc.about"}}{{/link-to}}</li>
+		<li>{{#link-to "settings" tabindex=0 markCurrent=true}}<i class="fa fa-cog" aria-hidden="true"></i><span>{{t "components.main-menu.misc.settings"}}</span>{{/link-to}}</li>
+		<li>{{#link-to "about" tabindex=0 markCurrent=true}}<i class="fa fa-info-circle" aria-hidden="true"></i><span>{{t "components.main-menu.misc.about"}}</span>{{/link-to}}</li>
 	</ul>
 </nav>

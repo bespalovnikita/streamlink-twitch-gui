@@ -8,6 +8,11 @@ export default LinkComponent.extend({
 	router: service(),
 
 	tabindex: -1,
+	attributeBindings: [ "ariaCurrent:aria-current" ],
+	markCurrent: false,
+	ariaCurrent: computed( "markCurrent", "_active", function() {
+		return this.markCurrent && this._active ? "location" : null;
+	}),
 
 	_active: computed(
 		"_routing.currentState",

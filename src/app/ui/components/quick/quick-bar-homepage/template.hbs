@@ -1,0 +1,9 @@
+<i
+	class="fa {{if isHomepage 'fa-check' icon}} {{if isSuccess 'anim-success' (if isFailure 'anim-failure')}}"
+	aria-hidden="true"
+></i>
+{{#if isHomepage}}
+	{{t "settings.main.homepage.title"}}
+{{else}}
+	{{t "components.quick-bar-homepage.title"}}
+{{/if}}

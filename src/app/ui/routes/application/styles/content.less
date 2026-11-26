@@ -1,15 +1,19 @@
 
 main.content {
 	flex: 1;
-	padding-right: ( @app-padding - @scrollbar-size );
+	min-width: 0;
+	padding: 20px ( @content-inset - @scrollbar-size ) @content-inset @content-inset;
 	overflow-y: scroll;
 
 	> h2,
 	> header > h2 {
-		height: 1.5em;
-		margin: 0;
+		min-width: 0;
+		margin: 0 0 16px;
 		overflow: hidden;
-		font-weight: lighter;
+		font-size: 1.75rem;
+		font-weight: 700;
+		line-height: 1.3;
+		letter-spacing: -.02em;
 		white-space: nowrap;
 		text-overflow: ellipsis;
 	}
@@ -17,6 +21,16 @@ main.content {
 	> header {
 		display: flex;
 		justify-content: space-between;
+
+		&:has(> h2) {
+			align-items: center;
+			min-height: 34px;
+			margin-bottom: 16px;
+		}
+
+		> h2 {
+			margin-bottom: 0;
+		}
 
 		> div.total {
 			flex-shrink: 0;
@@ -28,9 +42,5 @@ main.content {
 				.theme-mix-color( @theme-headline-sub-color, @theme-background );
 			});
 		}
-	}
-
-	&:not( .content-loading ) {
-		animation: animFadeInRight @anim-content-duration ease-out;
 	}
 }

@@ -1,5 +1,5 @@
 import { get, set, computed } from "@ember/object";
-import { alias, and, equal, notEmpty, or } from "@ember/object/computed";
+import { alias, and, equal, not, or } from "@ember/object/computed";
 import { on } from "@ember/object/evented";
 import { cancel, later } from "@ember/runloop";
 import ListItemComponent from "../-list-item/component";
@@ -17,12 +17,9 @@ export default ListItemComponent.extend({
 
 	classNameBindings: [
 		":stream-item-component",
-		"showDetailsBelow:details-below",
-		"showGame:show-game",
 		"settings.content.streams.show_flag:show-flag",
-		"settings.content.streams.show_info:show-info",
-		"infoGame:info-game",
-		"infoTitle:info-title",
+		"previewGame:preview-game",
+		"previewTitle:preview-title",
 		"isFaded:faded",
 		"expanded:expanded"
 	],
@@ -38,10 +35,12 @@ export default ListItemComponent.extend({
 	locked  : false,
 	timer   : null,
 
-	showGame: notEmpty( "content.game_id" ),
-
+	allowsPreviewInfo: not( "showDetailsBelow" ),
+	showPreviewInfo: and( "allowsPreviewInfo", "settings.content.streams.show_info" ),
 	infoGame: equal( "settings.content.streams.info", ATTR_STREAMS_INFO_GAME ),
 	infoTitle: equal( "settings.content.streams.info", ATTR_STREAMS_INFO_TITLE ),
+	previewGame: and( "showPreviewInfo", "infoGame" ),
+	previewTitle: and( "showPreviewInfo", "infoTitle" ),
 
 
 	isFaded: or( "faded", "fadedVodcast" ),
@@ -101,7 +100,9 @@ export default ListItemComponent.extend({
 		this.clearTimer();
 
 		this.timer = later( this, function() {
-			if ( get( this, "locked" ) ) { return; }
+			if ( get( this, "locked" ) || this.element.querySelector( ":focus-visible" ) ) {
+				return;
+			}
 			set( this, "expanded", false );
 		}, 1000 );
 	},
@@ -112,6 +113,16 @@ export default ListItemComponent.extend({
 			this.timer = null;
 		}
 	}),
+
+	keyDown( event ) {
+		if ( event.key !== "Escape" || !get( this, "expanded" ) ) { return; }
+
+		event.preventDefault();
+		event.stopPropagation();
+		this.clearTimer();
+		this.setProperties({ expanded: false, locked: false });
+		this.element.querySelector( ".btn-expand" ).focus();
+	},
 
 
 	actions: {

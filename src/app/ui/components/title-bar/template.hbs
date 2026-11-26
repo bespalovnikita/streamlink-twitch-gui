@@ -1,10 +1,14 @@
-<h1>{{displayName}}</h1>
-<div class="logo" {{action "homepage"}}></div>
+<h1>
+	<button type="button" class="logo" title={{t "settings.hotkeys.navigation.actions.homepage"}} {{action "homepage"}}>
+		<span>{{displayName}}</span>
+	</button>
+</h1>
 {{search-bar}}
-<nav class="buttons buttons-main">
+<div class="buttons buttons-main">
 	<button
 		type="button"
 		class="{{if auth.session.isLoggedIn 'btn-user' 'btn-no-user'}} {{if auth.session.isPending 'btn-user-pending'}} {{if notification.enabled 'btn-indicator'}} fa fa-user"
+		aria-label={{t "settings.hotkeys.navigation.actions.routeUserAuth"}}
 		title="{{unless auth.session.isLoggedIn
 			(t "components.title-bar.loggedout")
 			(t "components.title-bar.loggedin" name=auth.session.user_name status=notification.statusText)
@@ -12,22 +16,31 @@
 		{{action "goto" "user.index"}}
 	>
 		{{#if notification.enabled}}
-			<span class="indicator {{if notification.paused 'indicator-disabled' (if notification.error 'indicator-error')}} fa fa-bullhorn"></span>
+			<span aria-hidden="true" class="indicator {{if notification.paused 'indicator-disabled' (if notification.error 'indicator-error')}} fa fa-bullhorn"></span>
 		{{/if}}
 	</button>
-	<button type="button" class="btn-watching btn-indicator {{unless streaming.model.length 'btn-hidden'}} fa fa-desktop" {{action "goto" "watching"}}>
-		<span class="indicator">{{streaming.model.length}}</span>
-	</button>
-	<button type="button" class="btn-settings fa fa-cog" {{action "goto" "settings"}}></button>
-</nav>
-<nav class="buttons buttons-debug {{unless isDebug 'hidden'}}">
-	<button type="button" class="btn-reload fa fa-refresh" {{action "nwjs" "reload"}}></button>
-	<button type="button" class="btn-devtools fa fa-code" {{action "nwjs" "devTools"}}></button>
-</nav>
-<nav class="buttons buttons-window {{if settings.gui.hidebuttons 'buttons-hidden'}}">
-	<div>
-		<button type="button" class="btn-min fa fa-minus" {{action "nwjs" "minimize"}}></button>
-		<button type="button" class="btn-max fa fa-plus" {{action "nwjs" "maximize"}}></button>
-		<button type="button" class="btn-close fa fa-times" {{action "nwjs" "close"}}></button>
+	{{#if streaming.model.length}}
+		<button
+			type="button"
+			class="btn-watching btn-indicator fa fa-desktop"
+			aria-label={{concat (t "routes.watching.header") " (" streaming.model.length ")"}}
+			title={{t "routes.watching.header"}}
+			{{action "goto" "watching"}}
+		>
+			<span class="indicator">{{streaming.model.length}}</span>
+		</button>
+	{{/if}}
+</div>
+{{#if isDebug}}
+	<div class="buttons buttons-debug">
+		<button type="button" class="btn-reload fa fa-refresh" title={{t "contextmenu.macOS.refresh"}} {{action "nwjs" "reload"}}></button>
+		<button type="button" class="btn-devtools fa fa-code" title="DevTools" {{action "nwjs" "devTools"}}></button>
 	</div>
-</nav>
+{{/if}}
+{{#unless settings.gui.hidebuttons}}
+	<div class="buttons buttons-window">
+		<button type="button" class="btn-min fa fa-minus" title={{t "components.title-bar.minimize"}} {{action "nwjs" "minimize"}}></button>
+		<button type="button" class="btn-max fa fa-square-o" title={{t "components.title-bar.maximize"}} {{action "nwjs" "maximize"}}></button>
+		<button type="button" class="btn-close fa fa-times" title={{t "modal.dialog.action.close"}} {{action "nwjs" "close"}}></button>
+	</div>
+{{/unless}}

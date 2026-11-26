@@ -45,6 +45,8 @@ search-bar:
         channels: Channels
         streams: Streams
     recent: Recent queries
+    clear: Clear search
+    clear-history: Clear search history
 settings-channel-item:
     settings: Settings
     erase: Unset
@@ -90,6 +92,8 @@ team-item:
         title: "Modified last"
         format: "{updated_at, date, full}"
 title-bar:
+    minimize: Minimize window
+    maximize: Maximize or restore window
     loggedout: Not logged in
     # tooltip (whitespace sensitive)
     loggedin: |

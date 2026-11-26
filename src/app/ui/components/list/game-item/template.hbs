@@ -1,2 +1,6 @@
-{{preview-image src=content.box_art_url.latest}}
-<header>{{content.name}}</header>
+{{#link-to "games.game" content.id tabindex=0 title=content.name}}
+	<div class="game-cover" aria-hidden="true">
+		{{preview-image src=content.box_art_url.latest}}
+	</div>
+	<span class="game-title">{{content.name}}</span>
+{{/link-to}}

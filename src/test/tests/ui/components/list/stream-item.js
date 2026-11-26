@@ -1,7 +1,7 @@
 import { module, test } from "qunit";
 import { setupRenderingTest } from "ember-qunit";
 import { buildResolver } from "test-utils";
-import { render } from "@ember/test-helpers";
+import { click, render, settled, triggerEvent } from "@ember/test-helpers";
 import hbs from "htmlbars-inline-precompile";
 
 import { set } from "@ember/object";
@@ -10,6 +10,7 @@ import Component from "@ember/component";
 import { helper } from "@ember/component/helper";
 import StreamPreviewImageComponent from "ui/components/stream/stream-preview-image/component";
 import PreviewImageComponent from "ui/components/preview-image/component";
+import { helper as BoolAndHelper } from "ui/components/helper/bool-and";
 import { helper as BoolNotHelper } from "ui/components/helper/bool-not";
 import { helper as BoolOrHelper } from "ui/components/helper/bool-or";
 import { helper as FormatViewersHelper } from "ui/components/helper/format-viewers";
@@ -17,6 +18,9 @@ import { FakeIntlService, FakeTHelper } from "intl-utils";
 
 import StreamItemComponent from "ui/components/list/stream-item/component";
 import {
+	ATTR_STREAMS_CLICK_CHAT,
+	ATTR_STREAMS_INFO_GAME,
+	ATTR_STREAMS_INFO_TITLE,
 	ATTR_STREAMS_LANGUAGES_FADE,
 	ATTR_STREAMS_LANGUAGES_FILTER
 } from "data/models/settings/streams/fragment";
@@ -173,6 +177,7 @@ module( "ui/components/list/stream-item details below preview", function( hooks 
 			StreamItemComponent,
 			StreamPreviewImageComponent,
 			PreviewImageComponent,
+			BoolAndHelper,
 			BoolNotHelper,
 			BoolOrHelper,
 			FormatViewersHelper,
@@ -191,7 +196,7 @@ module( "ui/components/list/stream-item details below preview", function( hooks 
 
 	hooks.beforeEach(function() {
 		this.owner.register( "service:settings", Service.extend({
-			content: { streams: { info: "game", show_info: false } }
+			content: { streams: { info: ATTR_STREAMS_INFO_TITLE, show_info: false } }
 		}) );
 		this.owner.register( "service:streaming", Service.extend({ model: [] }) );
 		for ( const name of [ "chat", "nwjs", "router" ] ) {
@@ -202,7 +207,7 @@ module( "ui/components/list/stream-item details below preview", function( hooks 
 			title: "Ranked matches <script>alert(1)</script>",
 			game_name: "Dota 2",
 			game_id: "29595",
-			user: { detailedName: "Streamer" },
+			user: { detailedName: "Streamer", login: "streamer" },
 			viewer_count: 1234
 		});
 	});
@@ -232,7 +237,7 @@ module( "ui/components/list/stream-item details below preview", function( hooks 
 			"No preview tooltip"
 		);
 		assert.notOk(
-			card.querySelector( ".preview footer, .btn-expand" ),
+			card.querySelector( ".preview-info, .btn-expand" ),
 			"No duplicated hover panel"
 		);
 		assert.ok(
@@ -260,18 +265,64 @@ module( "ui/components/list/stream-item details below preview", function( hooks 
 		);
 	});
 
-	test( "Other stream lists retain their existing overlay", async function( assert ) {
+	test( "Discovery shows stream details before interacting", async function( assert ) {
 		await render( hbs`{{stream-item content=content faded=false}}` );
-		assert.notOk(
-			this.element.querySelector( ".stream-details" ),
-			"Below-preview details are opt-in"
+		assert.strictEqual(
+			this.element.querySelector( ".stream-details .stream-title" ).textContent,
+			this.content.title,
+			"The title is below the preview"
 		);
 		assert.strictEqual(
-			this.element.querySelector( ".preview" ).getAttribute( "title" ),
-			this.content.title,
-			"Existing tooltip remains"
+			this.element.querySelector( ".stream-details .stream-game a" ).textContent,
+			"Dota 2",
+			"The category is a link below the preview"
 		);
-		assert.ok( this.element.querySelector( ".preview footer" ), "Existing overlay remains" );
-		assert.ok( this.element.querySelector( ".btn-expand" ), "Existing expansion remains" );
+		assert.notOk( this.element.querySelector( ".preview-info" ), "No duplicate overlay" );
+
+		const detailsButton = this.element.querySelector( "button.btn-expand" );
+		assert.strictEqual( detailsButton.getAttribute( "aria-expanded" ), "false" );
+		await click( detailsButton );
+		assert.strictEqual( detailsButton.getAttribute( "aria-expanded" ), "true" );
+		const panelId = detailsButton.getAttribute( "aria-controls" );
+		const detailsPanel = document.getElementById( panelId );
+		assert.strictEqual( detailsPanel.textContent.trim(), this.content.title );
+		await triggerEvent( detailsButton, "keydown", { key: "Escape" } );
+		assert.strictEqual( detailsButton.getAttribute( "aria-expanded" ), "false" );
+		assert.strictEqual( document.activeElement, detailsButton, "Focus returns to the toggle" );
+	});
+
+	test( "Pinned info shows the selected field on the preview", async function( assert ) {
+		const { content: settings } = this.owner.lookup( "service:settings" );
+		set( settings, "streams.show_info", true );
+		await render( hbs`{{stream-item content=content faded=false}}` );
+		const previewInfo = () => this.element.querySelector( ".preview-info" ).textContent.trim();
+
+		assert.strictEqual( previewInfo(), this.content.title, "The selected title is pinned" );
+		assert.notOk( this.element.querySelector( ".stream-title" ), "No duplicate title" );
+		assert.ok( this.element.querySelector( ".stream-game a" ), "Category still links below" );
+
+		set( settings, "streams.info", ATTR_STREAMS_INFO_GAME );
+		await settled();
+		assert.strictEqual( previewInfo(), "Dota 2", "The category is pinned when selected" );
+		assert.ok( this.element.querySelector( ".preview-info a" ), "Pinned category still links" );
+		assert.notOk( this.element.querySelector( ".stream-game" ), "No duplicate category" );
+		assert.ok( this.element.querySelector( ".stream-title" ), "Title remains below" );
+	});
+
+	test( "The play button preserves preview shortcuts", async function( assert ) {
+		const { content: settings } = this.owner.lookup( "service:settings" );
+		set( settings, "streams.click_modify", ATTR_STREAMS_CLICK_CHAT );
+		set( settings, "streams.click_middle", ATTR_STREAMS_CLICK_CHAT );
+		this.owner.lookup( "service:streaming" ).startStream = stream => assert.step( stream.id );
+		this.owner.lookup( "service:chat" ).openChat = login => assert.step( login );
+		await render( hbs`{{stream-item content=content faded=false}}` );
+
+		const play = this.element.querySelector( "button.stream-preview-play" );
+		assert.strictEqual( play.tabIndex, 0, "The play button can receive focus" );
+		assert.ok( play.getAttribute( "aria-label" ).includes( "Streamer" ) );
+		await click( play );
+		await triggerEvent( play, "click", { button: 0, ctrlKey: true } );
+		await triggerEvent( play, "mouseup", { button: 1 } );
+		assert.verifySteps([ "123", "streamer", "streamer" ]);
 	});
 });

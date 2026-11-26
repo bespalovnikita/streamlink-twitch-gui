@@ -1,369 +1,188 @@
 @import (reference) "ui/styles/config";
 @import (reference) "ui/styles/mixins";
-@import (reference) "ui/styles/themes";
-@import (reference) "font-awesome/less/variables.less";
 
 
 .stream-item-component {
-	@padding: .25em;
-	@footer-height: ( 1 * unit( @line-height-base, em ) + 2 * @padding );
-	@duration: .25s;
+	@control-size: 32px;
+	@control-inset: 8px;
+	@title-line-height: 19px;
+	@meta-line-height: 24px;
+	@details-padding: 8px;
 
-	min-height: 185px;
-	margin-bottom: 20px;
+	// Infinite scroll uses the shortest layout, with the title pinned on the preview.
+	min-height: 190px;
+	margin-bottom: 1.25rem;
 	.dynamic-elems-per-row( 3, @content-width, 8%, @additional-width );
-	.stream-hover( @duration: @duration );
 
-	&.duplicateItem,
-	&.faded {
-		&:not(:hover):not(.expanded) > * {
-			opacity: .25;
-		}
+	> .preview {
+		position: relative;
+		overflow: hidden;
+		border-radius: 10px;
+		background: var(--ui-surface-muted);
+		cursor: pointer;
+		.block-aspect-ratio( ( 16 / 9 ) );
 
-		> * {
-			transition: opacity .333s ease-out;
+		&.expanded {
+			cursor: default;
 		}
 	}
 
-	> header {
-		display: flex;
-		align-items: center;
-		padding: .25em 0;
+	&.duplicateItem,
+	&.faded {
+		&:not(:hover):not(:focus-within):not(.expanded) .stream-preview-art {
+			opacity: .35;
+		}
+	}
 
-		> i {
-			opacity: 0;
-			transition: opacity @duration ease-out;
+	.stream-preview-play,
+	.btn-expand {
+		position: absolute;
+		top: @control-inset;
+		width: @control-size;
+		height: @control-size;
+		padding: 0;
+		border: 1px solid rgba( 255, 255, 255, .5 );
+		border-radius: 8px;
+		background: rgba( 15, 14, 20, .88 );
+		color: #fff;
+
+		> i.fa {
+			color: inherit;
 		}
 
-		> span {
-			flex: 1;
-			margin: 0 .5em;
-			overflow: hidden;
-			text-align: center;
-			white-space: nowrap;
-			text-overflow: ellipsis;
+		&:hover {
+			background: #17151f;
+		}
 
-			&.noL  { margin-left : ( .5em + @flag-icon-width ); }
-			&.noBL { margin-right: ( .5em + @flag-icon-width ); }
+		&:focus-visible {
+			outline: 2px solid #fff;
+			outline-offset: 1px;
+			box-shadow: 0 0 0 5px #17151f;
+		}
+	}
 
-			> a {
-				text-decoration: none;
+	.stream-preview-play {
+		left: @control-inset;
+	}
+
+	.btn-expand {
+		right: @control-inset;
+		z-index: 1;
+	}
+
+	.preview.opened > .stream-preview-play {
+		background: #6336b5;
+	}
+
+	.preview-info {
+		position: absolute;
+		right: 0;
+		bottom: 0;
+		left: 0;
+		padding: .25em .65em;
+		background: rgba( 15, 14, 20, .88 );
+		color: #fff;
+		line-height: @meta-line-height;
+		.text-overflow();
+
+		a[href] {
+			display: block;
+			color: inherit;
+			.text-overflow();
+
+			&:focus-visible {
+				outline-color: #fff;
+				outline-offset: -2px;
 			}
 		}
 	}
 
+	.stream-expanded-info {
+		position: absolute;
+		inset: 0;
+		padding: ( @control-inset * 2 + @control-size ) @control-inset @control-inset;
+		overflow-y: auto;
+		background: var(--ui-surface);
+		color: var(--ui-text);
+		overflow-wrap: anywhere;
+	}
+
+	> .stream-details {
+		min-height: ( @details-padding + 2 * @title-line-height + 2 * @meta-line-height );
+		padding-top: @details-padding;
+		color: var(--ui-text-muted);
+
+		> .stream-title {
+			.text-overflow-rows( 2 );
+			height: ( 2 * @title-line-height );
+			color: var(--ui-text);
+			font-weight: 600;
+			line-height: @title-line-height;
+			overflow-wrap: anywhere;
+		}
+
+		> .stream-channel,
+		> .stream-game {
+			line-height: @meta-line-height;
+		}
+
+		> .stream-channel {
+			display: flex;
+			align-items: center;
+			gap: .3em;
+
+			> i {
+				flex: none;
+				visibility: hidden;
+			}
+		}
+
+		a[href],
+		.stream-game > span {
+			display: inline-block;
+			max-width: 100%;
+			vertical-align: top;
+			.text-overflow();
+		}
+
+		a[href] {
+			color: var(--ui-text-muted);
+			text-decoration: none;
+			outline-offset: -2px;
+
+			&:hover {
+				color: var(--ui-accent);
+				text-decoration: underline;
+			}
+		}
+	}
+
+	&.preview-title > .stream-details {
+		min-height: ( @details-padding + 2 * @meta-line-height );
+	}
+
+	&.preview-game > .stream-details {
+		min-height: ( @details-padding + 2 * @title-line-height + @meta-line-height );
+	}
+
 	&:hover,
+	&:focus-within,
 	&.show-flag {
-		> header > i {
-			opacity: 1;
+		.stream-channel > i {
+			visibility: visible;
 		}
 	}
 
 	> footer {
 		display: flex;
 		justify-content: space-between;
+		color: var(--ui-text-muted);
+		font-size: .86em;
+		font-variant-numeric: tabular-nums;
 
-		.theme({
-			.theme-mix-color( @theme-streamitem-footer-color, @theme-streamitem-overlay-background );
-
-			i {
-				.theme-mix-color( @theme-streamitem-footer-icon-color, @theme-streamitem-overlay-background );
-			}
-		});
-
-		> span {
-			&:not(.vodcast-indicator) {
-				flex-basis: 45%;
-			}
-			&.vodcast-indicator {
-				flex-basis: 10%;
-				text-align: center;
-			}
-			&:last-of-type {
-				text-align: right;
-			}
+		i.fa {
+			margin-right: .15em;
+			color: inherit;
 		}
 	}
-
-	> .preview {
-		overflow: hidden;
-
-		> header,
-		> footer,
-		> .btn-expand {
-			position: absolute;
-			bottom: -@footer-height;
-			font-size: .85em;
-			opacity: 0;
-			transition: opacity @duration ease-out,
-			            top @duration ease-out,
-			            bottom @duration ease-out;
-		}
-
-		> .btn-expand {
-			right: 0;
-			padding: @padding ( 1.5 * @padding );
-			cursor: pointer;
-
-			&:hover {
-				opacity: .875 !important;
-			}
-
-			&:hover:active {
-				opacity: 1 !important;
-			}
-		}
-
-		&:hover,
-		&.expanded {
-			> .btn-expand {
-				bottom: 0;
-				opacity: .75;
-			}
-		}
-
-		// make expand button a bit more visible if there is no shaded footer
-		&:not(.expanded) > footer:not(.shaded) + .btn-expand {
-			opacity: .875;
-
-			> i {
-				.theme({
-					.theme-mix-color( @theme-streamitem-play-color, @theme-streamitem-overlay-background );
-					-webkit-text-stroke: .025em @theme-streamitem-play-stroke;
-				});
-			}
-		}
-
-		> header,
-		> footer > .bottom {
-			// Set an icon width and move the icon to the left, so the text remains centered.
-			// Let the text have a max-width, so the icon stays on the screen.
-			@icon-width: 1.5em;
-			@icon-offset: ( -1 * @icon-width );
-			@text-max-width: ( -2 * @icon-offset );
-
-			position: relative;
-			width: 100%;
-			height: @footer-height;
-
-			> div {
-				display: flex;
-				justify-content: center;
-				position: absolute;
-				left: 0;
-				bottom: 0;
-				width: 100%;
-				height: @footer-height;
-				padding: @padding;
-				opacity: 1;
-				transition: opacity @duration ease-out, bottom @duration ease-out;
-			}
-
-			i {
-				width: @icon-width;
-				margin-left: @icon-offset;
-				text-align: center;
-				text-indent: -.05em;
-			}
-
-			a,
-			span {
-				max-width: calc( 100% - @text-max-width );
-				text-decoration: none;
-				.text-overflow();
-			}
-
-			a:not(:hover) {
-				.theme({
-					.theme-mix-color( @theme-streamitem-game-color, @theme-streamitem-overlay-background );
-				});
-			}
-		}
-
-		> header {
-			position: absolute;
-			top: -@footer-height;
-			bottom: auto;
-			text-align: center;
-
-			.theme({
-				background: @theme-streamitem-overlay-background;
-			});
-		}
-
-		> footer {
-			display: flex;
-			flex-flow: column-reverse nowrap;
-			width: 100%;
-			height: 100%;
-
-			> .details {
-				position: relative;
-				flex-grow: 1;
-				overflow: hidden;
-
-				> div {
-					position: absolute;
-					width: 100%;
-					height: 100%;
-					display: flex;
-					flex-flow: column nowrap;
-					padding: @padding;
-					bottom: -100%;
-					opacity: 0;
-					transition: opacity @duration ease-out, bottom @duration ease-out;
-
-					> .stats {
-						display: flex;
-						justify-content: space-between;
-					}
-
-					> .status {
-						display: flex;
-						flex-flow: column nowrap;
-						flex-grow: 1;
-						justify-content: space-around;
-
-						> div {
-							// center text vertically and horizontally
-							// allow only 4 lines of text
-							flex-grow: 0;
-							display: -webkit-box;
-							padding: 0 .5em;
-							-webkit-line-clamp: 4;
-							-webkit-box-orient: vertical;
-							overflow: hidden;
-							text-overflow: ellipsis;
-							text-align: center;
-						}
-					}
-				}
-			}
-
-			&.expanded {
-				> .details > div {
-					bottom: 0;
-					opacity: 1;
-				}
-
-				&.locked {
-					> .bottom,
-					> .details > div {
-						cursor: default;
-					}
-				}
-			}
-
-			&.shaded > .bottom,
-			> .details > div {
-				.theme({
-					background: @theme-streamitem-overlay-background;
-				});
-			}
-
-			&:not(.shaded) > .details .status {
-				padding-bottom: ( @footer-height - @padding );
-			}
-		}
-
-		&:hover,
-		&.expanded {
-			> footer {
-				bottom: 0;
-				opacity: 1;
-			}
-		}
-
-		&:hover:not(.expanded) {
-			> header {
-				top: 0;
-				opacity: 1;
-				z-index: 1;
-			}
-		}
-
-		&:hover > .previewError::before {
-			opacity: 0;
-		}
-
-		&.expanded::after {
-			display: none;
-		}
-	}
-
-	&.show-info {
-		> .preview > footer {
-			bottom: 0;
-			opacity: 1;
-		}
-	}
-
-	// fix play icon position
-	&.show-game,
-	&.info-title {
-		> .preview::after {
-			top: calc( 50% - .75rem );
-		}
-	}
-
-	// show the right info in the bottom bar
-	&.info-game  > .preview > footer > .bottom > .info-title,
-	&.info-title > .preview > footer > .bottom > .info-game {
-		bottom: -100%;
-		opacity: 0;
-	}
-
-	// toggle game and title while being expanded
-	&.info-title {
-		> .preview.expanded > footer > .bottom {
-			> .info-game {
-				bottom: 0;
-				opacity: 1;
-			}
-
-			> .info-title {
-				bottom: 100%;
-				opacity: 0;
-			}
-		}
-
-		// don't show the game in expanded mode while being in the games.game route
-		&:not(.show-game) > .preview.expanded > footer > .bottom {
-			// move the game info down
-			> .info-game {
-				bottom: -100%;
-			}
-
-			// move the stream title up
-			> .info-title {
-				bottom: 100%;
-			}
-		}
-	}
-
-	> .stream-details {
-		padding: .35em 0;
-
-		> .stream-title {
-			display: -webkit-box;
-			min-height: ( 2 * unit( @line-height-base, em ) );
-			-webkit-line-clamp: 2;
-			-webkit-box-orient: vertical;
-			overflow: hidden;
-			overflow-wrap: anywhere;
-		}
-
-		> .stream-game {
-			.text-overflow();
-
-			> i {
-				margin-right: .35em;
-			}
-		}
-	}
-
-	&.details-below > .preview::after {
-		top: 50%;
-	}
-
 }

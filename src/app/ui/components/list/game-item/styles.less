@@ -1,71 +1,43 @@
 @import (reference) "ui/styles/config";
 @import (reference) "ui/styles/mixins";
-@import (reference) "ui/styles/themes";
 
 
 .game-item-component {
-	@padding: .333em;
-	@header-max-height: ( 2 * unit( @line-height-base, em ) + 2 * @padding );
-	@footer-max-height: ( 1 * unit( @line-height-base, em ) + 2 * @padding );
-	@speed: .2s;
-
-	position: relative;
-	min-height: 235px;
-	margin-bottom: 20px;
-	overflow: hidden;
-	cursor: pointer;
+	// Infinite scroll reads this minimum when estimating the initial number of rows.
+	min-height: 250px;
+	margin-bottom: 1.25rem;
 	.dynamic-elems-per-row( 4, @content-width, 8%, @additional-width );
-	.block-aspect-ratio( ( 272 / 380 ) );
 
-	&.duplicateItem {
-		transition: opacity .333s ease-out;
+	> a[href] {
+		display: block;
+		border-radius: 10px;
+		color: var(--ui-text);
+		text-decoration: none;
+		outline-offset: -2px;
 
-		&:not(:hover) {
-			opacity: .25;
+		&:hover > .game-title {
+			color: var(--ui-accent);
 		}
 	}
 
-	> header,
-	> footer {
-		position: absolute;
-		width: 100%;
-		padding: @padding;
-		opacity: 0;
-		transition: opacity @speed ease-out, top @speed ease-out, bottom @speed ease-out;
-
-		.theme({
-			.theme-color-and-background( @theme-gameitem-overlay-color, @theme-gameitem-overlay-background );
-		});
-	}
-
-	> header {
-		top: ( -1 * @header-max-height );
-		max-height: @header-max-height;
-		// limit text to two rows... needs webkit specific properties
-		display: -webkit-box;
-		-webkit-line-clamp: 2;
-		-webkit-box-orient: vertical;
+	.game-cover {
+		position: relative;
 		overflow: hidden;
-		text-overflow: ellipsis;
-		text-align: center;
+		border-radius: 10px;
+		background: var(--ui-surface-muted);
+		.block-aspect-ratio( ( 272 / 380 ) );
 	}
 
-	> footer {
-		bottom: ( -1 * @footer-max-height );
-		max-height: @footer-max-height;
-		display: flex;
-		justify-content: space-between;
+	.game-title {
+		.text-overflow-rows( 2 );
+		height: 2.7em;
+		margin: .55em 0 0;
+		font-weight: 600;
+		line-height: 1.35;
+		overflow-wrap: anywhere;
 	}
 
-	&:hover {
-		> header {
-			top: 0;
-			opacity: 1;
-		}
-
-		> footer {
-			bottom: 0;
-			opacity: 1;
-		}
+	&.duplicateItem:not(:hover):not(:focus-within) .game-cover > * {
+		opacity: .3;
 	}
 }

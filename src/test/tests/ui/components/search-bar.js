@@ -3,7 +3,7 @@ import { setupRenderingTest, setupTest } from "ember-qunit";
 import { buildResolver } from "test-utils";
 import { setupStore } from "store-utils";
 import { FakeIntlService, FakeTHelper } from "intl-utils";
-import { click, fillIn, focus, render } from "@ember/test-helpers";
+import { click, fillIn, focus, render, triggerEvent } from "@ember/test-helpers";
 import { triggerKeyDownEvent } from "event-utils";
 import hbs from "htmlbars-inline-precompile";
 import sinon from "sinon";
@@ -227,9 +227,18 @@ module( "ui/components/search-bar rendering", function( hooks ) {
 		assert.strictEqual( document.activeElement, button );
 
 		await click( button );
-		await focus( ".outside" );
-		assert.strictEqual( button.getAttribute( "aria-expanded" ), "false" );
 		const outside = this.element.querySelector( ".outside" );
+		// Hidden NW.js windows do not emit focusout when changing focus programmatically.
+		await triggerEvent( button, "focusout", { relatedTarget: outside } );
+		assert.strictEqual( button.getAttribute( "aria-expanded" ), "false", "Closes on focusout" );
+
+		await click( button );
+		await click( outside );
+		assert.strictEqual(
+			button.getAttribute( "aria-expanded" ),
+			"false",
+			"Closes on outside click"
+		);
 		assert.strictEqual( document.activeElement, outside );
 	});
 

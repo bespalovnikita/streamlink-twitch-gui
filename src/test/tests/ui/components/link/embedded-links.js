@@ -51,4 +51,9 @@ module( "ui/components/link/embedded-links", function( hooks ) {
 		);
 	});
 
+	test( "Embedded links can opt in to keyboard focus", async function( assert ) {
+		await render( hbs`{{embedded-links text="twitch.tv/foo" tabindex=0}}` );
+		assert.strictEqual( this.element.querySelector( "a" ).tabIndex, 0 );
+	});
+
 });

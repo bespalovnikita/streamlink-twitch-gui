@@ -24,9 +24,7 @@ main:
     homepage:
         title: Page d'accueil
         description: Menu à charger en premier ou en cliquant sur le logo.
-        text:
-            first: Voir la barre de menu en haut à droite de chaque page.
-            second: Cliquez sur le bouton Accueil pour en faire la nouvelle page d'accueil.
+        text: "Sur une page de streams, de jeux ou de chaînes suivies, sélectionnez « Définir comme page d'accueil »."
     theme:
         title: Thème
         description: Sélectionnez un thème de couleur pour l'interface.

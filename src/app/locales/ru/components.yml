@@ -31,16 +31,18 @@ main-menu:
 open-chat:
     title: Открыть чат
 quick-bar-homepage:
-    title: Сделать текущий раздел стартовым
+    title: Сделать стартовой
 search-bar:
     placeholder: Поиск
-    filter: "Фильтр результатов:"
+    filter: Фильтр результатов
     filters:
         all: Всё
         games: Игры
         channels: Каналы
         streams: Стримы
     recent: Последние запросы
+    clear: Очистить строку поиска
+    clear-history: Очистить историю поиска
 settings-channel-item:
     settings: Настройки
     erase: Сброс
@@ -86,6 +88,8 @@ team-item:
         title: "Дата изменения"
         format: "{updated_at, date, full}"
 title-bar:
+    minimize: Свернуть окно
+    maximize: Развернуть или восстановить окно
     loggedout: Вход не выполнен
     # tooltip (whitespace sensitive)
     loggedin: |

@@ -1,2 +1,14 @@
-{{preview-image src=src}}
+<div class="stream-preview-art" aria-hidden="true">{{preview-image src=src}}</div>
+{{#if playControl}}
+	{{#if clickable}}
+		<button
+			type="button"
+			class="stream-preview-play"
+			title={{t "contextmenu.launch-stream"}}
+			aria-label="{{t "contextmenu.launch-stream"}} · {{user.detailedName}}"
+		>
+			<i class="fa {{if opened "fa-play-circle" "fa-play"}}" aria-hidden="true"></i>
+		</button>
+	{{/if}}
+{{/if}}
 {{#if hasBlock}}{{yield}}{{/if}}

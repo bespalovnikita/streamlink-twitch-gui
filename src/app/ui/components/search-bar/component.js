@@ -23,7 +23,6 @@ export default Component.extend( HotkeyMixin, /** @class SearchBarComponent */  
 	store: service(),
 
 	layout,
-	tagName: "nav",
 	classNames: [ "search-bar-component" ],
 
 	// the record array (will be set by init())
@@ -109,26 +108,46 @@ export default Component.extend( HotkeyMixin, /** @class SearchBarComponent */  
 
 
 	_prepareDropdown: on( "didInsertElement", function() {
-		// dropdown
-		const { /** @type {HTMLElement} */ element } = this;
-		const dropdown = element.querySelector( ".searchbar-dropdown" );
-		const button = element.querySelector( ".btn-dropdown" );
-		const search = element.querySelector( "input[type='search']" );
-
-		search.addEventListener( "focus", ({ target }) => target.select() );
-
-		element.ownerDocument.body.addEventListener( "click", ({ target }) => {
-			// ignore clicks on the input, the dropdown button and on the dropdown itself
-			if (
-				   this.showDropdown
-				&& !search.contains( target )
-				&& !button.contains( target )
-				&& !dropdown.contains( target )
-			) {
+		const { element } = this;
+		const searchBox = element.querySelector( ".search-box" );
+		this._onOutsideClick = ({ target }) => {
+			if ( this.showDropdown && !searchBox.contains( target ) ) {
 				set( this, "showDropdown", false );
 			}
-		});
+		};
+		element.ownerDocument.body.addEventListener( "click", this._onOutsideClick );
 	}),
+
+	_removeDropdownListener: on( "willDestroyElement", function() {
+		this.element.ownerDocument.body.removeEventListener( "click", this._onOutsideClick );
+	}),
+
+	focusIn({ target }) {
+		if ( target.matches( "input[type='search']" ) ) {
+			target.select();
+		}
+	},
+
+	focusOut({ relatedTarget }) {
+		if (
+			   this.showDropdown
+			&& relatedTarget
+			&& !this.element.querySelector( ".search-box" ).contains( relatedTarget )
+		) {
+			set( this, "showDropdown", false );
+		}
+	},
+
+	keyDown( event ) {
+		if ( event.key !== "Escape" || !this.showDropdown ) { return; }
+
+		event.preventDefault();
+		event.stopPropagation();
+		if ( event.target.closest( ".searchbar-dropdown" ) ) {
+			this.element.querySelector( ".btn-dropdown" ).focus();
+		}
+		set( this, "showDropdown", false );
+	},
 
 
 	actions: {
@@ -149,14 +168,24 @@ export default Component.extend( HotkeyMixin, /** @class SearchBarComponent */  
 		},
 
 		toggleDropdown() {
-			set( this, "showDropdown", !this.showDropdown );
+			this.toggleProperty( "showDropdown" );
+		},
+
+		updateQuery({ target }) {
+			set( this, "query", target.value );
 		},
 
 		clear() {
 			set( this, "query", "" );
+			this.send( "focus" );
 		},
 
-		submit() {
+		selectFilter( filter ) {
+			set( this, "filter", filter );
+		},
+
+		submit( event ) {
+			event.preventDefault();
 			let query = this.query.trim();
 			let filter = this.filter;
 
@@ -172,10 +201,12 @@ export default Component.extend( HotkeyMixin, /** @class SearchBarComponent */  
 		},
 
 		searchHistory({ query, filter }) {
+			this.element.querySelector( ".btn-dropdown" ).focus();
 			this.doSearch( query, filter );
 		},
 
 		clearHistory() {
+			this.element.querySelector( ".btn-dropdown" ).focus();
 			this.deleteAllRecords();
 		}
 	}

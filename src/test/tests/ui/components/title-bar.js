@@ -109,6 +109,8 @@ module( "ui/components/title-bar", function( hooks ) {
 			"Does have a search bar"
 		);
 
+		assert.notOk( elem.querySelector( ".buttons-debug" ), "Debug controls are absent" );
+		this.set( "isDebug", true );
 		await click( elem.querySelector( ".btn-reload" ) );
 		assert.ok(
 			this.nwjsReloadSpy.calledOnce,
@@ -135,47 +137,22 @@ module( "ui/components/title-bar", function( hooks ) {
 			"Clicking close button closes the window"
 		);
 
-		assert.notOk(
-			elem.querySelector( ".buttons-window" ).classList.contains( "buttons-hidden" ),
-			"Window buttons are not hidden by default"
-		);
+		assert.ok( elem.querySelector( ".buttons-window" ), "Shows window controls by default" );
 		run( () => set( SettingsService, "gui.hidebuttons", true ) );
-		assert.ok(
-			elem.querySelector( ".buttons-window" ).classList.contains( "buttons-hidden" ),
-			"Window buttons are now hidden"
-		);
+		assert.notOk( elem.querySelector( ".buttons-window" ), "Omits hidden window controls" );
 
-		assert.ok(
-			elem.querySelector( ".buttons-debug" ).classList.contains( "hidden" ),
-			"Debug buttons are hidden in non-debug-mode"
-		);
-		this.set( "isDebug", true );
-		assert.notOk(
-			elem.querySelector( ".buttons-debug" ).classList.contains( "hidden" ),
-			"Debug buttons are not hidden in debug-mode"
-		);
-
-		await click( elem.querySelector( ".btn-settings" ) );
-		assert.propEqual(
-			this.routingTransitionToSpy.lastCall.args,
-			[ "settings" ],
-			"Clicking the settings button redirects to the settings menu"
-		);
-
+		assert.notOk( elem.querySelector( ".btn-watching" ), "Omits watching with no streams" );
+		run( () => set( StreamingService, "model.length", 1 ) );
 		await click( elem.querySelector( ".btn-watching" ) );
 		assert.propEqual(
 			this.routingTransitionToSpy.lastCall.args,
 			[ "watching" ],
 			"Clicking the watching button redirects to the watching menu"
 		);
-		assert.ok(
-			elem.querySelector( ".btn-watching" ).classList.contains( "btn-hidden" ),
-			"The watching button is hidden while not watching any streams"
-		);
-		run( () => set( StreamingService, "model.length", 1 ) );
-		assert.notOk(
-			elem.querySelector( ".btn-watching" ).classList.contains( "btn-hidden" ),
-			"The watching button is visible while watching streams"
+		assert.strictEqual(
+			elem.querySelector( ".btn-watching" ).getAttribute( "aria-label" ),
+			"routes.watching.header (1)",
+			"Watching button gives the action and count to a screen reader"
 		);
 		assert.strictEqual(
 			elem.querySelector( ".btn-watching .indicator" ).innerText,

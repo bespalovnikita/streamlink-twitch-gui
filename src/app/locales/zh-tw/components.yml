@@ -45,6 +45,8 @@ search-bar:
         channels: 頻道
         streams: 實況
     recent: 最近查詢
+    clear: 清除搜尋內容
+    clear-history: 清除搜尋記錄
 settings-channel-item:
     settings: 設定
     erase: 清除
@@ -90,6 +92,8 @@ team-item:
         title: "最後更新日期"
         format: "{updated_at, date, full}"
 title-bar:
+    minimize: 最小化視窗
+    maximize: 最大化或還原視窗
     loggedout: 尚未登入
     # tooltip (whitespace sensitive)
     loggedin: |

@@ -1,16 +1,22 @@
 import { module, test } from "qunit";
-import { setupTest } from "ember-qunit";
+import { setupRenderingTest, setupTest } from "ember-qunit";
 import { buildResolver } from "test-utils";
 import { setupStore } from "store-utils";
-import { FakeIntlService } from "intl-utils";
+import { FakeIntlService, FakeTHelper } from "intl-utils";
+import { click, fillIn, focus, render } from "@ember/test-helpers";
+import { triggerKeyDownEvent } from "event-utils";
+import hbs from "htmlbars-inline-precompile";
 import sinon from "sinon";
 
+import { A } from "@ember/array";
 import { observer } from "@ember/object";
 import Service from "@ember/service";
 import Adapter from "ember-data/adapter";
 
 import searchBarComponentInjector from "inject-loader?config!ui/components/search-bar/component";
 import Search from "data/models/search/model";
+import { helper as IsEqualHelper } from "ui/components/helper/is-equal";
+import { helper as TimeFromNowHelper } from "ui/components/helper/time-from-now";
 
 
 module( "ui/components/search-bar", function( hooks ) {
@@ -157,6 +163,108 @@ module( "ui/components/search-bar", function( hooks ) {
 			this.store.peekAll( "search" ).map( record => record.id ),
 			[ "2", "3", "5" ],
 			"Store only has the right records loaded"
+		);
+	});
+});
+
+
+module( "ui/components/search-bar rendering", function( hooks ) {
+	const { default: SearchBarComponent } = searchBarComponentInjector({
+		config: { vars: { "search-history-size": 3 } }
+	});
+
+	setupRenderingTest( hooks, {
+		resolver: buildResolver({
+			IntlService: FakeIntlService,
+			IsEqualHelper,
+			THelper: FakeTHelper,
+			TimeFromNowHelper
+		})
+	});
+
+	hooks.beforeEach(function() {
+		const history = this.history = A();
+		this.transitionTo = sinon.spy();
+
+		this.owner.register( "component:search-bar", SearchBarComponent.extend({
+			addRecord() {},
+			deleteAllRecords() {
+				history.clear();
+			}
+		}) );
+		this.owner.register( "service:hotkey", Service.extend({ register() {}, unregister() {} }) );
+		this.owner.register( "service:router", Service.extend({
+			transitionTo: this.transitionTo
+		}) );
+		this.owner.register( "service:store", Service.extend({
+			findAll: () => Promise.resolve( history )
+		}) );
+	});
+
+	test( "filter disclosure closes on Escape or leaving the search box", async function( assert ) {
+		await render( hbs`
+			{{search-bar}}
+			<button type="button" class="outside">Outside</button>
+		` );
+		const button = this.element.querySelector( ".btn-dropdown" );
+		const dropdown = this.element.querySelector( ".searchbar-dropdown" );
+		const input = this.element.querySelector( "input[type='search']" );
+
+		assert.strictEqual(
+			input.getAttribute( "aria-label" ),
+			"components.search-bar.placeholder"
+		);
+		assert.strictEqual( button.getAttribute( "aria-controls" ), dropdown.id );
+		assert.strictEqual( button.getAttribute( "aria-expanded" ), "false" );
+		await click( button );
+		assert.strictEqual( button.getAttribute( "aria-expanded" ), "true" );
+
+		const radio = dropdown.querySelector( "input:checked" );
+		assert.strictEqual( radio.value, "all" );
+		await focus( radio );
+		await triggerKeyDownEvent( radio, "Escape" );
+		assert.strictEqual( button.getAttribute( "aria-expanded" ), "false" );
+		assert.strictEqual( document.activeElement, button );
+
+		await click( button );
+		await focus( ".outside" );
+		assert.strictEqual( button.getAttribute( "aria-expanded" ), "false" );
+		const outside = this.element.querySelector( ".outside" );
+		assert.strictEqual( document.activeElement, outside );
+	});
+
+	test( "submit and retry history entries without losing focus", async function( assert ) {
+		this.history.pushObject({ query: "example", filter: "games", date: new Date() });
+		await render( hbs`{{search-bar}}` );
+		const button = this.element.querySelector( ".btn-dropdown" );
+
+		await click( button );
+		const retry = this.element.querySelector( ".recent li > button" );
+		await click( retry );
+		assert.propEqual(
+			this.transitionTo.lastCall.args,
+			[ "search", { queryParams: { query: "example", filter: "games" } } ]
+		);
+		assert.strictEqual( document.activeElement, button );
+
+		await click( button );
+		await click( ".recent .clear" );
+		assert.strictEqual( this.history.length, 0 );
+		assert.strictEqual( document.activeElement, button );
+
+		await click( ".search-filters input[value='games']" );
+		await fillIn( "input[type='search']", "game name" );
+		await click( ".btn-search" );
+		assert.propEqual(
+			this.transitionTo.lastCall.args,
+			[ "search", { queryParams: { query: "game name", filter: "games" } } ]
+		);
+
+		await fillIn( "input[type='search']", "https://twitch.tv/example" );
+		await click( ".btn-search" );
+		assert.propEqual(
+			this.transitionTo.lastCall.args,
+			[ "search", { queryParams: { query: "example", filter: "channels" } } ]
 		);
 	});
 });

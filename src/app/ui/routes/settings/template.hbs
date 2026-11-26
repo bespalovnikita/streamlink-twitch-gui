@@ -1,19 +1,27 @@
 <main class="content content-settings {{if isAnimated 'animated'}}">
-<h2>{{t "settings.menu.header"}}</h2>
 <header>
-{{sub-menu "settings" (hash
-	main=(t "settings.menu.main")
-	gui=(t "settings.menu.gui")
-	streaming=(t "settings.menu.streaming")
-	player=(t "settings.menu.player")
-	streams=(t "settings.menu.streams")
-	chat=(t "settings.menu.chat")
-	languages=(t "settings.menu.languages")
-	hotkeys=(t "settings.menu.hotkeys")
-	notifications=(t "settings.menu.notifications")
-	channels=(t "settings.menu.channels")
-)}}
+	<h2>{{t "settings.menu.header"}}</h2>
 </header>
+<nav class="settings-navigation" aria-label={{t "settings.menu.header"}}>
+	{{#sub-menu "settings" (hash
+		main=(t "settings.menu.main")
+		gui=(t "settings.menu.gui")
+		streaming=(t "settings.menu.streaming")
+		player=(t "settings.menu.player")
+		streams=(t "settings.menu.streams")
+		chat=(t "settings.menu.chat")
+		languages=(t "settings.menu.languages")
+		hotkeys=(t "settings.menu.hotkeys")
+		notifications=(t "settings.menu.notifications")
+		channels=(t "settings.menu.channels")
+	) as |subroute name|}}
+		<li>
+			{{#link-to (concat "settings." subroute) tabindex=0 markCurrent=true}}
+				{{name}}
+			{{/link-to}}
+		</li>
+	{{/sub-menu}}
+</nav>
 {{outlet}}
 {{settings-submit
 	apply=(action "apply")

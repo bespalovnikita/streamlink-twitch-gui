@@ -33,9 +33,7 @@ main:
     homepage:
         title: Página principal
         description: Carregar menu primeiro ou quando clicar no logo.
-        text:
-            first: Ver a barra de menu no canto superior direito de cada página.
-            second: Clicar no botão 'Página principal' para ir a página principal.
+        text: "Em uma página de transmissões, jogos ou canais seguidos, selecione “Definir como página principal”."
     theme:
         title: Tema
         description: Selecionar uma cor tema para a interface (GUI).

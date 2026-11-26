@@ -41,6 +41,8 @@ search-bar:
         channels: Canali
         streams: Streams
     recent: Richieste recenti
+    clear: Cancella ricerca
+    clear-history: Cancella cronologia delle ricerche
 settings-channel-item:
     settings: Impostazioni
     erase: Non settato
@@ -84,6 +86,8 @@ team-item:
         title: "Ultima modifica"
         format: "{updated_at, date, full}"
 title-bar:
+    minimize: Riduci a icona
+    maximize: Ingrandisci o ripristina la finestra
     loggedout: Accesso non effettuato
     # Variabili disponibili (whitespace sensitive)
     loggedin: |

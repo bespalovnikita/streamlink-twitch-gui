@@ -1,58 +1,66 @@
-<header>
-	{{#if content.hasLanguage}}{{flag-icon type="channel" lang=content.language}}{{/if}}
-	<span class="{{unless content.hasLanguage 'noL'}} {{unless content.hasBroadcasterLanguage 'noBL'}}">{{#link-to "channel" content.id}}{{content.user.detailedName}}{{/link-to}}</span>
-	{{#if content.hasBroadcasterLanguage}}{{flag-icon type="broadcaster" lang=content.channel.broadcaster_language}}{{/if}}
-</header>
 {{#stream-preview-image
 	src=content.thumbnail_url.latest
 	stream=content
 	user=content.user
 	clickable=(bool-not expanded)
+	playControl=true
 	tagName="section"
 	class=(if expanded "expanded")
-	title=(unless (bool-or expanded showDetailsBelow)
-		(unless infoTitle content.title content.game_name)
-		""
-	)
 	action=(action "collapse")
 }}
-	{{#unless showDetailsBelow}}
-		<footer class="{{if (bool-or infoTitle showGame) 'shaded'}} {{if expanded 'expanded'}} {{if locked 'locked'}}">
-			<div class="bottom {{unless (bool-or infoTitle showGame) 'hidden'}}">
-				<div class="info-game">{{#if content.game_id}}<i class="fa fa-gamepad"></i>{{#link-to "games.game" content.game_id title=content.game_name}}{{content.game_name}}{{/link-to}}{{/if}}</div>
-				<div class="info-title"><i></i><span>{{content.title}}</span></div>
-			</div>
-			<div class="details">
-				<div>
-					<div class="stats"></div>
-					<div class="status">
-						{{embedded-links text=content.title}}
-					</div>
+	{{#if allowsPreviewInfo}}
+		<button
+			type="button"
+			class="btn-expand"
+			aria-expanded={{if expanded "true" "false"}}
+			aria-controls="{{elementId}}-details"
+			title={{t (concat "components.stream-item.details." (unless expanded "show" (if locked "unlock" "lock")))}}
+			aria-label={{t (concat "components.stream-item.details." (unless expanded "show" (if locked "unlock" "lock")))}}
+			{{action "expand" bubbles=false}}
+		>
+			<i class="fa {{unless expanded "fa-ellipsis-h" (if locked "fa-lock" "fa-unlock-alt")}}" aria-hidden="true"></i>
+		</button>
+		{{#unless expanded}}
+			{{#if (bool-or previewTitle (bool-and previewGame content.game_name))}}
+				<div class="preview-info">
+					{{#if previewTitle}}
+						<span title={{content.title}}>{{content.title}}</span>
+					{{else if content.game_id}}
+						{{#link-to "games.game" content.game_id tabindex=0 title=content.game_name}}{{content.game_name}}{{/link-to}}
+					{{else}}
+						<span title={{content.game_name}}>{{content.game_name}}</span>
+					{{/if}}
 				</div>
-			</div>
-		</footer>
-		<div class="btn-expand" title="{{t (concat 'components.stream-item.details.' (unless expanded 'show' (if locked 'unlock' 'lock')))}}" {{action "expand" bubbles=false}}>
-			<i class="fa {{unless expanded 'fa-chevron-up' (if locked 'fa-lock' 'fa-unlock-alt')}}"></i>
+			{{/if}}
+		{{/unless}}
+		<div class="stream-expanded-info" id="{{elementId}}-details" hidden={{unless expanded true}}>
+			{{#if expanded}}{{embedded-links text=content.title tabindex=0}}{{/if}}
 		</div>
-	{{/unless}}
+	{{/if}}
 {{/stream-preview-image}}
-{{#if showDetailsBelow}}
-	<div class="stream-details">
-		<div class="stream-title">{{content.title}}</div>
+<div class="stream-details">
+	{{#unless previewTitle}}
+		<div class="stream-title" title={{content.title}}>{{content.title}}</div>
+	{{/unless}}
+	<div class="stream-channel">
+		{{#link-to "channel" content.id tabindex=0 title=content.user.detailedName}}{{content.user.detailedName}}{{/link-to}}
+		{{#if content.hasLanguage}}{{flag-icon type="channel" lang=content.language}}{{/if}}
+		{{#if content.hasBroadcasterLanguage}}{{flag-icon type="broadcaster" lang=content.channel.broadcaster_language}}{{/if}}
+	</div>
+	{{#unless previewGame}}
 		{{#if content.game_name}}
 			<div class="stream-game">
-				<i class="fa fa-gamepad" aria-hidden="true"></i>
 				{{#if content.game_id}}
-					{{#link-to "games.game" content.game_id}}{{content.game_name}}{{/link-to}}
+					{{#link-to "games.game" content.game_id tabindex=0 title=content.game_name}}{{content.game_name}}{{/link-to}}
 				{{else}}
-					{{content.game_name}}
+					<span title={{content.game_name}}>{{content.game_name}}</span>
 				{{/if}}
 			</div>
 		{{/if}}
-	</div>
-{{/if}}
+	{{/unless}}
+</div>
 <footer>
-	<span title="{{content.titleStartedAt}}"><i class="fa fa-clock-o"></i> {{hours-from-now content.started_at interval=60000}}</span>
-	{{#if content.isVodcast}}<span class="vodcast-indicator" title="{{t 'components.stream-item.vodcast'}}"><i class="fa fa-recycle"></i></span>{{/if}}
-	<span title="{{content.titleViewers}}">{{format-viewers content.viewer_count}} <i class="fa fa-users"></i></span>
+	<span title={{content.titleViewers}}><i class="fa fa-users" aria-hidden="true"></i> {{format-viewers content.viewer_count}}</span>
+	{{#if content.isVodcast}}<span class="vodcast-indicator" title="{{t 'components.stream-item.vodcast'}}"><i class="fa fa-recycle" aria-hidden="true"></i></span>{{/if}}
+	<span title={{content.titleStartedAt}}><i class="fa fa-clock-o" aria-hidden="true"></i> {{hours-from-now content.started_at interval=60000}}</span>
 </footer>

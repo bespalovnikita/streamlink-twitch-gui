@@ -33,6 +33,8 @@
 @app-width: 960px;
 @app-height: 540px;
 @app-padding: 30px;
+@content-inset: 24px;
+@chrome-inset: 16px;
 
 @menu-width: 200px;
 
@@ -42,16 +44,11 @@
 @content-width: ( @app-width - @menu-width - 2 * @scrollbar-size );
 @additional-width: ( @app-width - @content-width );
 
-@titlebar-size: 28px;
-@titlebar-height: ( 2 * @app-padding + @titlebar-size );
-@titlebar-buttons-width: 400px;
-@titlebar-btn-fontsize: 20px;
+@titlebar-size: 34px;
+@titlebar-height: 60px;
+@titlebar-btn-fontsize: 15px;
 
-@searchbar-btn-size: @titlebar-size;
-@searchbar-padding: .333rem;
 @searchbar-dropdown-max-items: 5;
-@searchbar-dropdown-font-size: .95rem;
-@searchbar-dropdown-line-height: 1.3;
 
 @button-size: 2.25em;
 @button-border-width: 1px;
@@ -68,9 +65,6 @@
 @anim-sidebar-speed: .2s;
 @anim-sidebar-easing: ease-out;
 @anim-content-duration: .333s;
-@anim-list-item-duration: .333s;
-@anim-list-item-offset-min: ( @anim-content-duration * 1 / 2 );
-@anim-list-item-offset-max: 1s;
 
 
 // We're using strict parsing settings, so we need to use a custom implementation.

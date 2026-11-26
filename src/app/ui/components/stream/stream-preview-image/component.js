@@ -54,6 +54,7 @@ export default Component.extend({
 	}),
 
 	clickable: true,
+	playControl: false,
 
 
 	opened: computed( "stream.id", "streaming.model.@each.id", function() {

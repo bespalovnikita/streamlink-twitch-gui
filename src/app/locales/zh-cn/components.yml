@@ -42,6 +42,8 @@ search-bar:
         channels: 频道
         streams: 直播
     recent: 搜索历史
+    clear: 清除搜索内容
+    clear-history: 清除搜索历史
 settings-channel-item:
     settings: 设置
     erase: 清除
@@ -87,6 +89,8 @@ team-item:
         title: "最后更新日期"
         format: "{updated_at, date, full}"
 title-bar:
+    minimize: 最小化窗口
+    maximize: 最大化或还原窗口
     loggedout: 未登录
     # tooltip (whitespace sensitive)
     loggedin: |

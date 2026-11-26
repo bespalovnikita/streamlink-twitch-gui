@@ -5,22 +5,23 @@
 
 
 .content-settings {
-	@margin: 2rem;
-
 	display: flex;
 	flex-direction: column;
 	overflow-x: hidden;
+	scroll-padding-bottom: 3.5rem;
 
 	> * {
 		flex-shrink: 0;
 	}
 
 	> fieldset {
-		margin-bottom: @margin;
-	}
-
-	> fieldset:last-of-type {
-		flex-grow: 1;
+		min-width: 0;
+		margin: 0 0 1rem;
+		padding: 1rem;
+		border: 1px solid var(--ui-border);
+		border-radius: .75rem;
+		background: var(--ui-surface);
+		color: var(--ui-text);
 	}
 
 	&.animated > fieldset {

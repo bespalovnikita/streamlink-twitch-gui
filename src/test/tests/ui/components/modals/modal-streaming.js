@@ -72,7 +72,7 @@ module( "ui/components/modals/modal-streaming", function( hooks ) {
 			}
 		}) );
 
-		this.context = EmberObject.create({
+		this.context = EmberObject.extend({
 			user: { id: "1", detailedName: "Channel" },
 			stream: { id: "1" },
 			isPreparing: true,
@@ -81,7 +81,7 @@ module( "ui/components/modals/modal-streaming", function( hooks ) {
 			}),
 			showLog: false,
 			quality: "source"
-		});
+		}).create();
 		this.open = async () => {
 			await render( hbs`
 				<button type="button" class="outside">Play</button>

@@ -1,22 +1,30 @@
-@import (reference) "ui/styles/config";
-
-
 main.content.content-loading {
-	@size: 6rem;
-
 	display: flex;
+	flex-direction: column;
 	align-items: center;
 	justify-content: center;
-	padding: 0;
+	gap: .75rem;
+	padding: 1rem;
 	overflow: hidden;
+	color: var(--ui-text-muted);
 
-	> .loading-spinner-component {
-		position: relative;
-		width: @size;
-		height: @size;
+	> .loading-indicator {
+		display: flex;
+	}
+
+	.loading-spinner-component {
+		width: 2.25rem;
+		height: 2.25rem;
 
 		> circle {
-			stroke: @color-primary;
+			stroke: var(--ui-accent);
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.loading-spinner-component,
+		.loading-spinner-component > circle {
+			animation: none;
 		}
 	}
 }

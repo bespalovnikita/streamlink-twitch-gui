@@ -5,13 +5,20 @@
 .modal-dialog-component {
 	position: fixed;
 	z-index: 10000;
+	border-radius: 14px;
+	outline-offset: -2px;
 
 	> div {
 		display: flex;
 		flex-flow: column nowrap;
-		width: 45rem;
+		width: min(45rem, calc(100vw - 2rem));
 		min-height: 16rem;
+		max-height: calc(100vh - 2rem);
 		padding: 2rem;
+		overflow-y: auto;
+		border: 1px solid var(--ui-border);
+		border-radius: inherit;
+		box-shadow: 0 16px 48px var(--ui-shadow);
 		opacity: 1;
 		animation: animFadeInTop .333s ease-out 0s 1 normal;
 
@@ -29,6 +36,12 @@
 
 		> div * {
 			animation-play-state: paused !important;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		> div {
+			animation-duration: 1ms;
 		}
 	}
 

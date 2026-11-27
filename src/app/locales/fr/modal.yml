@@ -22,12 +22,12 @@ debug:
     action:
         close: Okay
 firstrun:
-    body: |
-        Merci d'utiliser {name}!<br>
-        Voulez-vous d'abord configurer l'application avant de commencer ?
+    header: "Configurer la lecture"
+    body: "Pour regarder des streams, installez Streamlink et un lecteur vidéo externe tel que VLC ou mpv. Indiquez leurs chemins dans les paramètres si nécessaire."
     action:
-        start: Commencer maintenant
-        settings: Paramètres
+        start: "Continuer"
+        streamlink: "Configurer Streamlink"
+        player: "Configurer le lecteur vidéo"
 newrelease:
     header: "Vous utilisez une version obsolète: {version}"
     body: "Voulez-vous télécharger la dernière version maintenant ? ({version})"
@@ -59,9 +59,11 @@ streaming:
             timeout: "Erreur: Timeout"
             internal: "Erreur"
     body:
+        warning: "Avertissement"
         launching: "En attente de {provider} de lancer le stream..."
         ended: "Voulez-vous relancer le stream maintenant ?"
         error:
+            diagnostics: "Ouvrez le diagnostic pour en savoir plus."
             provider: "Veuillez vérifier vos paramètres et/ou (ré)installer {provider}."
             player: "Veuillez vérifier les paramètres du lecteur."
             version: "La version v{version} ne remplit pas les exigences minimales. (v{required})."
@@ -69,10 +71,15 @@ streaming:
             no-streams-found: "{provider} n'a pas réussi à trouver le stream."
             timeout: "Soit {name} est hors ligne, soit votre connexion à Twitch a été interrompue."
             internal: "Erreur interne"
+    quality:
+        label: "Qualité"
+        restart: "Appliquer un changement de qualité redémarre la lecture."
     action:
+        player-settings: "Ouvrir les paramètres du lecteur"
+        provider-settings: "Ouvrir les paramètres du fournisseur"
         abort: Abandonner
-        continue: Continuer
+        continue: "Retour à l’application"
         download: Télécharger
-        log: Activer/désactiver les logs {provider}
+        log: "Diagnostic ({provider})"
         restart: Redémarrer
         shutdown: Fermer le stream

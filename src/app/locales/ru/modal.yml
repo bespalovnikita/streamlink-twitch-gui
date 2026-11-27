@@ -22,12 +22,12 @@ debug:
     action:
         close: Хорошо
 firstrun:
-    body: |
-        Спасибо за выбор {name}!<br>
-        Вы хотите настроить приложение перед запуском?
+    header: "Настройка просмотра"
+    body: "Для просмотра трансляций установите Streamlink и внешний видеоплеер, например VLC или mpv. При необходимости укажите пути к ним в настройках."
     action:
-        start: Запуск
-        settings: Настройки
+        start: "Продолжить"
+        streamlink: "Настроить Streamlink"
+        player: "Настроить плеер"
 newrelease:
     header: "Вы используете устаревшую версию: {version}"
     body: "Хотите скачать последнюю версию ({version})?"
@@ -45,7 +45,7 @@ quit:
         quit: Выход
 streaming:
     header:
-        preparing: "Идет подготовка, пожалуйста, ожидайте"
+        preparing: "Подготовка стрима"
         launching: "Подключение: {channel}"
         watching: "Просмотр: {channel}"
         ended: "Стрим прерван/закончен: {channel}"
@@ -59,9 +59,11 @@ streaming:
             timeout: "Ошибка: время ожидания вышло"
             internal: "Ошибка"
     body:
+        warning: "Предупреждение"
         launching: "Ждем, пока {provider} подключится к стриму ..."
         ended: "Вы хотите переподключиться к стриму?"
         error:
+            diagnostics: "Откройте диагностику для подробностей."
             provider: "Проверьте настройки и/или (пере)установите {provider}."
             player: "Пожалуйста, проверьте настройки плеера"
             version: "Версия v{version} не соответствует минимальным требованиям (v{required})"
@@ -69,10 +71,15 @@ streaming:
             no-streams-found: "{provider} не смог найти стрим"
             timeout: "Либо {name} отключился, либо соединение с Twitch было разорвано"
             internal: "Внутренняя ошибка"
+    quality:
+        label: "Качество"
+        restart: "Применение нового качества перезапустит воспроизведение."
     action:
+        player-settings: "Открыть настройки плеера"
+        provider-settings: "Открыть настройки провайдера"
         abort: Прервать
-        continue: Продолжить
+        continue: "Вернуться в приложение"
         download: Скачать
-        log: Показать/скрыть журнал {provider}
-        restart: Перезапуск
-        shutdown: Выключить
+        log: "Диагностика ({provider})"
+        restart: "Запустить снова"
+        shutdown: "Остановить стрим"

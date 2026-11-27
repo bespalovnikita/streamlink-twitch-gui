@@ -22,12 +22,12 @@ debug:
     action:
         close: 好的
 firstrun:
-    body: |
-        感谢使用{name}！<br>
-        你想在使用前进行设置吗？
+    header: "设置播放"
+    body: "观看直播需要安装 Streamlink 和 VLC 或 mpv 等外部播放器。如有需要，可在设置中指定程序路径。"
     action:
-        start: 立即使用
-        settings: 设置
+        start: "继续"
+        streamlink: "设置 Streamlink"
+        player: "设置播放器"
 newrelease:
     header: "你正在使用过时的版本{version}"
     body: "要下载最新版吗？({version})"
@@ -59,9 +59,11 @@ streaming:
             timeout: "错误：已超时"
             internal: "错误"
     body:
+        warning: "警告"
         launching: "等待{provider}启动直播中……"
         ended: "现在重新启动直播？"
         error:
+            diagnostics: "打开诊断信息以了解详情。"
             provider: "请检查你的设置或重新安装{provider}。"
             player: "请检查你的播放器设置。"
             version: "当前版本v{version}不满足最低版本要求 (v{required})。"
@@ -69,10 +71,15 @@ streaming:
             no-streams-found: "{provider}无法找到直播。"
             timeout: "{name} 已离线，或你与Twitch的连接已中断。"
             internal: "内部错误"
+    quality:
+        label: "画质"
+        restart: "应用画质变更后将重新开始播放。"
     action:
+        player-settings: "打开播放器设置"
+        provider-settings: "打开提供程序设置"
         abort: 中断
-        continue: 继续
+        continue: "返回应用"
         download: 下载
-        log: 显示/隐藏{provider}日志
+        log: "诊断信息（{provider}）"
         restart: 重启
         shutdown: 中断直播

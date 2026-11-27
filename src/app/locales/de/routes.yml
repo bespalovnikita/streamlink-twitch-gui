@@ -1,6 +1,10 @@
 error:
     header: Fehler
     text: Beim Anzeigen der Seite ist ein Fehler aufgetreten.
+    retry: Erneut versuchen
+    details: Technische Details
+loading:
+    message: Wird geladen …
 about:
     about:
         header: Über
@@ -141,14 +145,26 @@ search:
     subheader:
         games: Spiele
         channels: Kanäle
-    empty: Deine Suchanfrage lieferte keine Ergebnisse...
+    empty: Keine Ergebnisse
+    empty-hint: Prüfe die Schreibweise oder verwende weniger Wörter.
+    empty-filtered-hint: Du kannst mit derselben Suchanfrage nach Spielen und Kanälen suchen.
+    search-all: Spiele und Kanäle durchsuchen
+    edit-query: Suchanfrage bearbeiten
 watching:
-    header: Du schaust
+    header: "Wiedergabe"
     buttons:
-        open: Dialog öffnen
-        close: Stream schließen
+        open: "Details"
+        close: "Stoppen"
+        dismiss: "Entfernen"
+    status:
+        pending: "Wird vorbereitet"
+        starting: "Wird gestartet"
+        playing: "Läuft"
+        failed: "Fehlgeschlagen"
+        ended: "Beendet"
+    quality: "Qualität: {quality}"
     empty:
-        header: Alle Streams wurden geschlossen
-        next: Was tun als nächstes?
-        streams: Beliebte Streams anschauen
-        followed: Gefolgte Streams anschauen
+        header: "Keine aktiven Streams"
+        next: "Starte einen Stream, um hier die Wiedergabe zu steuern."
+        streams: "Beliebte Streams entdecken"
+        followed: "Gefolgte Streams anzeigen"

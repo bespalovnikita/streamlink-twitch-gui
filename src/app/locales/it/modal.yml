@@ -22,12 +22,12 @@ debug:
     action:
         close: Okay
 firstrun:
-    body: |
-        Grazie per usare {name}!<br>
-        Vuoi configurare l'applicazione prima di iniziare?
+    header: "Configurare la riproduzione"
+    body: "Per guardare gli stream, installa Streamlink e un lettore video esterno come VLC o mpv. Se necessario, indica i percorsi nelle impostazioni."
     action:
-        start: Avvia ora
-        settings: Impostazioni
+        start: "Continua"
+        streamlink: "Configura Streamlink"
+        player: "Configura il lettore video"
 newrelease:
     header: "Stai utilizzando una versione obsoleta: {version}"
     body: "Vuoi scaricare l'ultima versione adesso? ({version})"
@@ -59,9 +59,11 @@ streaming:
             timeout: "Errore: Tempo scaduto"
             internal: "Errore"
     body:
+        warning: "Avviso"
         launching: "In attesa che {provider} avii lo stream..."
         ended: "Vuoi riavviare lo streaming ora?"
         error:
+            diagnostics: "Apri la diagnostica per ulteriori informazioni."
             provider: "Si prega di controllare le impostazioni e/o (re)installare {provider}."
             player: "Si prega di controllare le impostazioni del lettore."
             version: "La versione v{version} non rispetta i requisiti minimi (v{required})."
@@ -69,10 +71,15 @@ streaming:
             no-streams-found: "Non sono riuscito a trovare lo stream {provider}"
             timeout: "O {name} è offline o la tua connessione a Twitch è stata interrotta."
             internal: "Errore interno"
+    quality:
+        label: "Qualità"
+        restart: "Applicare una modifica alla qualità riavvia la riproduzione."
     action:
+        player-settings: "Apri le impostazioni del lettore"
+        provider-settings: "Apri le impostazioni del fornitore"
         abort: Interrompi
-        continue: Continua
+        continue: "Torna all’app"
         download: Scarica
-        log: attiva/disattiva registro {provider}
+        log: "Diagnostica ({provider})"
         restart: Riavvia
         shutdown: Chiudi stream

@@ -1,6 +1,10 @@
 error:
     header: 错误
     text: 读取页面时发生错误
+    retry: 重试
+    details: 技术详情
+loading:
+    message: 正在加载…
 about:
     about:
         header: 关于
@@ -140,14 +144,26 @@ search:
     subheader:
         games: 游戏
         channels: 频道
-    empty: 找不到您查询的内容。
+    empty: 未找到结果
+    empty-hint: 请检查拼写，或试试更短的关键词。
+    empty-filtered-hint: 可以使用相同的关键词搜索游戏和频道。
+    search-all: 搜索游戏和频道
+    edit-query: 编辑搜索内容
 watching:
-    header: 正在观看
+    header: "播放"
     buttons:
-        open: 打开对话框
-        close: 关闭直播
+        open: "详情"
+        close: "停止"
+        dismiss: "移除"
+    status:
+        pending: "准备中"
+        starting: "启动中"
+        playing: "正在播放"
+        failed: "失败"
+        ended: "已结束"
+    quality: "画质：{quality}"
     empty:
-        header: 所有直播已关闭
-        next: 下一步？
-        streams: 观看热门直播
-        followed: 观看已关注直播
+        header: "没有正在播放的直播"
+        next: "打开直播后，可在这里管理播放。"
+        streams: "浏览热门直播"
+        followed: "查看已关注的直播"

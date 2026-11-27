@@ -1,7 +1,27 @@
 <main class="content content-search">
-	<h2>{{t (concat "routes.search.header." filter)}}<span>{{query}}</span></h2>
+	<h2>{{t (concat "routes.search.header." filter)}}<span> {{query}}</span></h2>
 	{{#if noResults}}
-		<section class="noresults">{{t "routes.search.empty"}}</section>
+		<section class="state-panel">
+			<h3 class="state-panel-title">{{t "routes.search.empty"}}</h3>
+			<p>
+				{{#if notFiltered}}
+					{{t "routes.search.empty-hint"}}
+				{{else}}
+					{{t "routes.search.empty-filtered-hint"}}
+				{{/if}}
+			</p>
+			<div class="state-actions">
+				{{#if notFiltered}}
+					<button type="button" class="state-action state-action-primary" {{action "editQuery"}}>
+						{{t "routes.search.edit-query"}}
+					</button>
+				{{else}}
+					<button type="button" class="state-action state-action-primary" {{action "searchAll"}}>
+						{{t "routes.search.search-all"}}
+					</button>
+				{{/if}}
+			</div>
+		</section>
 	{{/if}}
 
 	{{#if games.length}}

@@ -22,12 +22,12 @@ debug:
     action:
         close: Okay
 firstrun:
-    body: |
-        Thanks for using {name}!<br>
-        Do you want to configure the application first before you start?
+    header: "Set up playback"
+    body: "To watch streams, install Streamlink and an external video player such as VLC or mpv. Set their paths in Settings if needed."
     action:
-        start: Start now
-        settings: Settings
+        start: "Continue"
+        streamlink: "Configure Streamlink"
+        player: "Configure video player"
 newrelease:
     header: "You're using an outdated version: {version}"
     body: "Do you want to download the latest release now? ({version})"
@@ -45,7 +45,7 @@ quit:
         quit: Quit
 streaming:
     header:
-        preparing: "Preparing, please wait"
+        preparing: "Preparing stream"
         launching: "Launching: {channel}"
         watching: "Watching: {channel}"
         ended: "Stream ended: {channel}"
@@ -59,9 +59,11 @@ streaming:
             timeout: "Error: Timeout"
             internal: "Error"
     body:
+        warning: "Warning"
         launching: "Waiting for {provider} to launch the stream..."
         ended: "Do you want to restart the stream now?"
         error:
+            diagnostics: "Open diagnostics for more information."
             provider: "Please check your settings and/or (re)install {provider}."
             player: "Please check your player settings."
             version: "The version v{version} doesn't match the min. requirements (v{required})."
@@ -69,10 +71,15 @@ streaming:
             no-streams-found: "{provider} was unable to find the stream."
             timeout: "Either {name} has gone offline, or your connection to Twitch has been interrupted."
             internal: "Internal error"
+    quality:
+        label: "Quality"
+        restart: "Applying a quality change restarts playback."
     action:
+        player-settings: "Open player settings"
+        provider-settings: "Open provider settings"
         abort: Abort
-        continue: Continue
+        continue: "Back to app"
         download: Download
-        log: Toggle {provider} log
+        log: "Diagnostics ({provider})"
         restart: Restart
         shutdown: Close stream

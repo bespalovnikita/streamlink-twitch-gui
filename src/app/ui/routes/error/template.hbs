@@ -1,10 +1,22 @@
-{{#selectable-text tagName="main" class="content content-error"}}
-<h2>{{t "routes.error.header"}}</h2>
-<h4>{{t "routes.error.text"}}</h4>
-<dl class="dl-horizontal">
-{{#each model as |row|}}
-<dt>{{row.key}}</dt>
-<dd class="{{if row.isStack 'stack'}}">{{row.value}}</dd>
-{{/each}}
-</dl>
-{{/selectable-text}}
+<main class="content content-error">
+	<h2>{{t "routes.error.header"}}</h2>
+	<section class="state-panel">
+		<p role="alert">{{t "routes.error.text"}}</p>
+		<div class="state-actions">
+			<button type="button" class="state-action state-action-primary" {{action "retry"}}>
+				{{t "routes.error.retry"}}
+			</button>
+		</div>
+		{{#if model.length}}
+			<details class="error-details">
+				<summary>{{t "routes.error.details"}}</summary>
+				{{#selectable-text tagName="dl"}}
+					{{#each model as |row|}}
+						<dt>{{row.key}}</dt>
+						<dd class={{if row.isStack "stack"}}>{{row.value}}</dd>
+					{{/each}}
+				{{/selectable-text}}
+			</details>
+		{{/if}}
+	</section>
+</main>

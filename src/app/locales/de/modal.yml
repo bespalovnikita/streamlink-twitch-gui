@@ -22,12 +22,12 @@ debug:
     action:
         close: Okay
 firstrun:
-    body: |
-        Danke für das Verwenden von {name}!<br>
-        Möchtest du die Anwendung zuerst konfigurieren, bevor du startest?
+    header: "Wiedergabe einrichten"
+    body: "Zum Ansehen von Streams brauchst du Streamlink und einen externen Videoplayer wie VLC oder mpv. Bei Bedarf kannst du die Pfade in den Einstellungen angeben."
     action:
-        start: Jetzt starten
-        settings: Einstellungen
+        start: "Weiter"
+        streamlink: "Streamlink einrichten"
+        player: "Videoplayer einrichten"
 newrelease:
     header: "Du verwendest eine alte Version: {version}"
     body: "Möchtest du die neueste Version jetzt herunterladen? ({version})"
@@ -59,9 +59,11 @@ streaming:
             timeout: "Fehler: Timeout"
             internal: "Fehler"
     body:
+        warning: "Warnung"
         launching: "Warte darauf, dass {provider} den Stream startet..."
         ended: "Möchtest du den Stream jetzt neu starten?"
         error:
+            diagnostics: "Öffnen Sie die Diagnose für weitere Informationen."
             provider: "Bitte Einstellungen überprüfen und/oder {provider} (neu) installieren."
             player: "Bitte prüfe deine Playereinstellungen."
             version: "Die Version v{version} entspricht nicht den Mindestvorraussetzungen (v{required})."
@@ -69,10 +71,15 @@ streaming:
             no-streams-found: "{provider} konnte den Stream nicht finden."
             timeout: "Entweder ist {name} nun offline, oder deine Verbindung zu Twitch wurde unterbrochen."
             internal: "Interner Fehler"
+    quality:
+        label: "Qualität"
+        restart: "Beim Anwenden wird die Wiedergabe neu gestartet."
     action:
+        player-settings: "Player-Einstellungen öffnen"
+        provider-settings: "Anbieter-Einstellungen öffnen"
         abort: Abbrechen
-        continue: Weiter
+        continue: "Zurück zur App"
         download: Herunterladen
-        log: "{provider} Logansicht ein-/ausschalten"
+        log: "Diagnose ({provider})"
         restart: Neu starten
         shutdown: Stream schließen

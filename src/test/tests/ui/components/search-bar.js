@@ -3,20 +3,23 @@ import { setupRenderingTest, setupTest } from "ember-qunit";
 import { buildResolver } from "test-utils";
 import { setupStore } from "store-utils";
 import { FakeIntlService, FakeTHelper } from "intl-utils";
-import { click, fillIn, focus, render, triggerEvent } from "@ember/test-helpers";
+import { click, fillIn, focus, render, settled, triggerEvent } from "@ember/test-helpers";
 import { triggerKeyDownEvent } from "event-utils";
 import hbs from "htmlbars-inline-precompile";
 import sinon from "sinon";
 
 import { A } from "@ember/array";
 import { observer } from "@ember/object";
+import { run } from "@ember/runloop";
 import Service from "@ember/service";
 import Adapter from "ember-data/adapter";
 
 import searchBarComponentInjector from "inject-loader?config!ui/components/search-bar/component";
 import Search from "data/models/search/model";
+import SearchBarService from "services/search-bar";
 import { helper as IsEqualHelper } from "ui/components/helper/is-equal";
 import { helper as TimeFromNowHelper } from "ui/components/helper/time-from-now";
+import SearchController from "ui/routes/search/controller";
 
 
 module( "ui/components/search-bar", function( hooks ) {
@@ -25,6 +28,7 @@ module( "ui/components/search-bar", function( hooks ) {
 			IntlService: FakeIntlService,
 			HotkeyService: Service.extend(),
 			RouterService: Service.extend(),
+			SearchBarService,
 			Search
 		})
 	});
@@ -177,6 +181,8 @@ module( "ui/components/search-bar rendering", function( hooks ) {
 		resolver: buildResolver({
 			IntlService: FakeIntlService,
 			IsEqualHelper,
+			SearchBarService,
+			SearchController,
 			THelper: FakeTHelper,
 			TimeFromNowHelper
 		})
@@ -275,5 +281,41 @@ module( "ui/components/search-bar rendering", function( hooks ) {
 			this.transitionTo.lastCall.args,
 			[ "search", { queryParams: { query: "example", filter: "channels" } } ]
 		);
+	});
+
+	test( "empty search recovery uses the current route query", async function( assert ) {
+		const controller = this.owner.lookup( "controller:search" );
+		controller.setProperties({ query: "no match & spaces", filter: "games" });
+		await render( hbs`{{search-bar}}` );
+
+		run( () => controller.send( "searchAll" ) );
+		assert.propEqual(
+			this.transitionTo.lastCall.args,
+			[ "search", { queryParams: { query: "no match & spaces", filter: "all" } } ]
+		);
+
+		await fillIn( "input[type='search']", "other draft" );
+		await click( ".btn-dropdown" );
+		await click( ".search-filters input[value='games']" );
+		run( () => {
+			controller.set( "filter", "all" );
+			controller.send( "editQuery" );
+		});
+		await settled();
+
+		const field = this.element.querySelector( "input[type='search']" );
+		assert.strictEqual( field.value, "no match & spaces", "Restores the displayed query" );
+		assert.strictEqual( document.activeElement, field, "Focuses the editable query" );
+		assert.strictEqual(
+			this.element.querySelector( ".btn-dropdown" ).getAttribute( "aria-expanded" ),
+			"false",
+			"Closes the filters before editing"
+		);
+		assert.strictEqual(
+			this.element.querySelector( ".search-filters input:checked" ).value,
+			"all",
+			"Restores the displayed filter"
+		);
+		assert.ok( this.transitionTo.calledOnce, "Editing does not rerun the search" );
 	});
 });

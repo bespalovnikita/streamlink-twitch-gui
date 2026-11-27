@@ -22,12 +22,12 @@ debug:
     action:
         close: Okay
 firstrun:
-    body: |
-        Obrigado por usar {name}!<br>
-        Você gostaria de configurar a aplicação antes de iniciar?
+    header: "Configurar reprodução"
+    body: "Para assistir às transmissões, instale o Streamlink e um reprodutor de vídeo externo, como VLC ou mpv. Se necessário, informe os caminhos nas preferências."
     action:
-        start: Iniciar agora
-        settings: Preferências
+        start: "Continuar"
+        streamlink: "Configurar Streamlink"
+        player: "Configurar reprodutor"
 newrelease:
     header: "Você está usando uma versão desatualizada: {version}"
     body: "Você gostaria de baixar a última versão agora? ({version})"
@@ -59,9 +59,11 @@ streaming:
             timeout: "Erro: tempo excedido"
             internal: "Erro"
     body:
+        warning: "Aviso"
         launching: "Esperando por {provider} para abrir o stream..."
         ended: "Você quer reiniciar o stream agora?"
         error:
+            diagnostics: "Abra o diagnóstico para obter mais informações."
             provider: "Por favor verifique suas preferências e/ou (re)instale {provider}."
             player: "Por favor verifique as preferências do tocador de vídeo."
             version: "A versão v{version} não corresponde com os requisitos (v{required})."
@@ -69,10 +71,15 @@ streaming:
             no-streams-found: "{provider} não foi possível encontrar o stream."
             timeout: "{name} desligou o stream, ou a sua conexão com o Twitch foi interrompida."
             internal: "Erro interno"
+    quality:
+        label: "Qualidade"
+        restart: "Aplicar uma alteração de qualidade reinicia a reprodução."
     action:
+        player-settings: "Abrir configurações do reprodutor"
+        provider-settings: "Abrir configurações do provedor"
         abort: Abortar
-        continue: Continuar
+        continue: "Voltar ao aplicativo"
         download: Baixar
-        log: Mostra/Ocultar log do {provider}
+        log: "Diagnóstico ({provider})"
         restart: Reiniciar
         shutdown: Fechar stream

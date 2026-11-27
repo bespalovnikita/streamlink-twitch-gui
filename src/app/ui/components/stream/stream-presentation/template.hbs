@@ -1,20 +1,50 @@
-<div class="image">
-	{{stream-preview-image
-		stream=stream
-		user=stream.user
-		clickable=clickablePreview
-		src=stream.thumbnail_url.latest
-		noContextmenu=(bool-not clickablePreview)
-	}}
+<div class="watching-preview" aria-hidden="true">
+	{{preview-image src=session.stream.thumbnail_url.latest}}
 </div>
-<div class="info">
-	<h3 class="title">{{#if stream.hasLanguage}}{{flag-icon type="channel" lang=stream.language}}{{/if}}{{#link-to "channel" stream.id}}{{stream.user.detailedName}}{{/link-to}}</h3>
-	{{#if stream.game_id}}<div class="game"><i class="fa fa-gamepad"></i>{{#link-to "games.game" stream.game_id}}{{stream.game_name}}{{/link-to}}</div>{{/if}}
-	{{stats-row stream=stream}}
-	{{embedded-links class="status" text=stream.title}}
-	{{#if hasBlock}}
-		<footer class="buttons">
-			{{yield}}
-		</footer>
+<div class="watching-info">
+	<div class="watching-meta">
+		<span class="watching-status {{sessionStatus}}" role="status">
+			{{t (concat "routes.watching.status." sessionStatus)}}
+		</span>
+		{{#unless session.isPreparing}}
+			<span class="watching-quality">{{t "routes.watching.quality"
+				quality=(t (concat "qualities." session.streamQualityPreset.id))
+			}}</span>
+		{{/unless}}
+	</div>
+	<h3 class="watching-channel">
+		{{#link-to "channel" session.user.id tabindex=0}}{{session.user.detailedName}}{{/link-to}}
+		{{#if session.stream.hasLanguage}}{{flag-icon type="channel" lang=session.stream.language}}{{/if}}
+		{{#if session.stream.hasBroadcasterLanguage}}{{flag-icon type="broadcaster" lang=session.stream.channel.broadcaster_language}}{{/if}}
+	</h3>
+	{{#if session.stream.title}}
+		{{embedded-links class="watching-description" text=session.stream.title tabindex=0}}
 	{{/if}}
+	{{#if session.stream.game_name}}
+		<div class="watching-category">
+			{{#if session.stream.game_id}}
+				{{#link-to "games.game" session.stream.game_id tabindex=0}}{{session.stream.game_name}}{{/link-to}}
+			{{else}}
+				{{session.stream.game_name}}
+			{{/if}}
+		</div>
+	{{/if}}
+</div>
+<div class="watching-actions">
+	<button
+		type="button"
+		class="watching-details"
+		aria-label="{{t "routes.watching.buttons.open"}} · {{session.user.detailedName}}"
+		{{action showDetails}}
+	>{{t "routes.watching.buttons.open"}}</button>
+	{{#if canClose}}
+		<button
+			type="button"
+			class="watching-close"
+			aria-label="{{t (if session.hasEnded "routes.watching.buttons.dismiss" "routes.watching.buttons.close")}} · {{session.user.detailedName}}"
+			{{action closeSession}}
+		>{{t (if session.hasEnded "routes.watching.buttons.dismiss" "routes.watching.buttons.close")}}</button>
+	{{/if}}
+	{{open-chat user=session.user hotkeysDisabled=true}}
+	{{share-channel user=session.user hotkeysDisabled=true}}
 </div>

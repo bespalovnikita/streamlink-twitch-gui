@@ -1,0 +1,63 @@
+.state-panel {
+	max-width: 44rem;
+	padding: 1.5rem;
+	border: 1px solid var(--ui-border);
+	border-radius: 12px;
+	background: var(--ui-surface);
+	color: var(--ui-text);
+
+	> p {
+		max-width: 52ch;
+		margin: 0;
+		color: var(--ui-text-muted);
+	}
+
+	> .state-actions {
+		margin-top: 1rem;
+	}
+}
+
+.state-panel-title {
+	margin: 0 0 .5rem;
+	color: var(--ui-text);
+	font-size: 1.25rem;
+	font-weight: 700;
+}
+
+.state-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: .5rem;
+
+	.state-action {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 2.5rem;
+		padding: .375rem .75rem;
+		border: 1px solid var(--ui-control-border);
+		border-radius: 8px;
+		background: var(--ui-surface);
+		color: var(--ui-text);
+		font: inherit;
+		font-weight: 600;
+		text-align: center;
+		text-decoration: none;
+
+		&:hover {
+			background: var(--ui-surface-muted);
+			color: var(--ui-accent);
+			text-decoration: none;
+		}
+
+		&.state-action-primary {
+			border-color: transparent;
+			background: @color-primary;
+			color: #fff;
+
+			&:hover {
+				background: darken( @color-primary, 8% );
+			}
+		}
+	}
+}

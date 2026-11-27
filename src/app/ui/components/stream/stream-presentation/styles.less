@@ -1,45 +1,150 @@
-
 .stream-presentation-component {
-	display: flex;
-	flex-flow: row nowrap;
-	justify-content: space-between;
+	display: grid;
+	grid-template-columns: clamp( 104px, 12vw, 156px ) minmax( 0, 1fr ) fit-content( 17rem );
+	align-items: center;
+	gap: 1rem;
+	padding: .85rem;
+	border: 1px solid var(--ui-border);
+	border-radius: 12px;
+	background: var(--ui-surface);
 
-	> .image {
+	> .watching-preview {
 		position: relative;
-		width: 59%;
+		align-self: start;
+		aspect-ratio: 16 / 9;
+		overflow: hidden;
+		border-radius: 8px;
+		background: var(--ui-surface-muted);
+
+		.previewError::before {
+			font-size: 2.5rem;
+		}
 	}
 
-	> .info {
-		width: 38.5%;
+	.watching-meta {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: .25rem .6rem;
+		margin-bottom: .25rem;
+		font-size: .85rem;
+	}
 
-		> .title {
-			margin-top: 0;
+	.watching-status {
+		display: inline-flex;
+		align-items: center;
+		gap: .4rem;
+		padding: .125rem .45rem;
+		border-radius: .35rem;
+		background: var(--ui-surface-muted);
+		color: var(--ui-text-muted);
+		font-weight: 600;
+
+		&::before {
+			width: .45rem;
+			height: .45rem;
+			border: 1px solid currentColor;
+			border-radius: 50%;
+			content: "";
+		}
+
+		&.starting,
+		&.playing {
+			background: var(--ui-selected);
+			color: var(--ui-accent);
+		}
+
+		&.playing::before,
+		&.failed::before {
+			background: currentColor;
+		}
+
+		&.failed {
+			color: #a33444;
+
+			html.theme-dark & {
+				color: #ffa7b0;
+			}
+		}
+	}
+
+	.watching-quality,
+	.watching-category {
+		color: var(--ui-text-muted);
+	}
+
+	.watching-channel {
+		display: flex;
+		align-items: baseline;
+		gap: .45rem;
+		margin: 0 0 .125rem;
+		font-size: 1.1rem;
+
+		> a {
+			min-width: 0;
 			overflow: hidden;
 			text-overflow: ellipsis;
 			white-space: nowrap;
-
-			> .flag-icon-component {
-				margin-right: .25em;
-			}
-
-			> a {
-				text-decoration: none;
-			}
 		}
+	}
 
-		> .game {
-			> i.fa-gamepad {
-				margin-right: .333em;
-			}
-		}
+	.watching-description {
+		color: var(--ui-text);
+		overflow-wrap: anywhere;
+	}
 
-		> .stats-row-component {
-			max-width: 20em;
-			margin-top: .5em;
-		}
+	.watching-category {
+		font-size: .9rem;
 
-		> .status {
-			margin: .5em 0;
+		> a {
+			color: inherit;
 		}
+	}
+
+	.watching-actions {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: flex-end;
+		gap: .35rem;
+	}
+}
+
+html body .stream-presentation-component .watching-actions > button:is(
+	.watching-details, .watching-close, .form-button-component
+) {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 32px;
+	min-height: 32px;
+	height: auto;
+	padding: 0 .6rem;
+	border: 1px solid var(--ui-control-border);
+	border-radius: 8px;
+	background: var(--ui-surface);
+	color: var(--ui-text);
+	font-size: .9rem;
+
+	&.icon {
+		width: 32px;
+		padding: 0;
+	}
+
+	&.watching-details {
+		border-color: transparent;
+		background: var(--ui-selected);
+		color: var(--ui-accent);
+	}
+
+	&:not(:disabled):hover {
+		border-color: var(--ui-accent);
+		background: var(--ui-surface-muted);
+		color: var(--ui-accent);
+	}
+
+	&.icon > i,
+	&.icon:not(:disabled):hover > i,
+	&.icon:not(:disabled):hover:active > i {
+		color: inherit;
 	}
 }

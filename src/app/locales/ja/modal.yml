@@ -22,12 +22,12 @@ debug:
     action:
         close: "OK"
 firstrun:
-    body: |
-        "{name}をお使いいただきありがとうございます！<br>
-        使用前にセットアップを行いますか？"
+    header: "再生の設定"
+    body: "配信を視聴するには、Streamlink と VLC や mpv などの外部プレーヤーをインストールしてください。必要に応じて設定画面で実行ファイルのパスを指定できます。"
     action:
-        start: "すぐに使用する"
-        settings: "設定"
+        start: "続ける"
+        streamlink: "Streamlink の設定"
+        player: "プレーヤーの設定"
 newrelease:
     header: "古いバージョン: {version} を使用しています"
     body: "最新バージョンをダウンロードしますか？ ({version})"
@@ -59,9 +59,11 @@ streaming:
             timeout: "エラー：タイムアウト"
             internal: "エラー"
     body:
+        warning: "警告"
         launching: "{provider}がライブを開始するのを待っています…"
         ended: "ライブを再開しますか？"
         error:
+            diagnostics: "詳しくは診断情報を確認してください。"
             provider: "設定を確認するか、{provider}を再インストールしてください。"
             player: "プレイヤーの設定を確認してください。"
             version: "現在のバージョン v{version} は、最小バージョン要件 (v{required}) を満たしていません。"
@@ -69,10 +71,15 @@ streaming:
             no-streams-found: "{provider}はライブを見つけることが出来ませんでした。"
             timeout: "{name}がオフラインになっているかTwitchへの接続が切断されています。"
             internal: "内部エラー"
+    quality:
+        label: "画質"
+        restart: "画質の変更を適用すると、再生が再開されます。"
     action:
+        player-settings: "プレイヤー設定を開く"
+        provider-settings: "プロバイダー設定を開く"
         abort: "中止"
-        continue: "続ける"
+        continue: "アプリに戻る"
         download: "ダウンロード"
-        log: "{provider}ログのオン/オフ"
+        log: "診断情報（{provider}）"
         restart: "再開"
         shutdown: "ライブを閉じる"

@@ -1,228 +1,205 @@
 <div>
-	{{#unless error}}
-		{{#if modalContext.isPreparing}}
-			{{#modal-header}}
-				{{t "modal.streaming.header.preparing"}}
-			{{/modal-header}}
-			{{#modal-body class="loading"}}
-				{{loading-spinner}}
-			{{/modal-body}}
-			{{#modal-footer}}
-				{{#form-button
-					action=(action "abort")
-					classNames="btn-danger"
-					icon="fa-times"
-				}}
-					{{t "modal.streaming.action.abort"}}
-				{{/form-button}}
-			{{/modal-footer}}
-		{{else if modalContext.hasEnded}}
-			{{#modal-header}}
-				{{#link-to "channel" modalContext.user.id}}
-					{{t "modal.streaming.header.ended" channel=modalContext.user.detailedName}}
-				{{/link-to}}
-			{{/modal-header}}
-			{{#modal-body}}
-				{{t "modal.streaming.body.ended"}}
-			{{/modal-body}}
-		{{else}}
-			{{#if modalContext.isLaunching}}
-				{{#modal-header}}
-					{{#link-to "channel" modalContext.user.id}}
-						{{t "modal.streaming.header.launching" channel=modalContext.user.detailedName}}
-					{{/link-to}}
-				{{/modal-header}}
-				{{#modal-body class="launching"}}
-					{{t "modal.streaming.body.launching" provider=providerName}}
-				{{/modal-body}}
-				{{modal-log class="launching" log=modalContext.log}}
-			{{else if modalContext.isWatching}}
-				{{#modal-header}}
-					{{#link-to "channel" modalContext.user.id}}
-						{{t "modal.streaming.header.watching" channel=modalContext.user.detailedName}}
-					{{/link-to}}
-				{{/modal-header}}
-				{{#modal-body}}
-					{{#if modalContext.stream.game_name}}
-						<div class="game">
-							<i class="fa fa-gamepad"></i> {{#link-to "games.game" modalContext.stream.game.id}}{{modalContext.stream.game_name}}{{/link-to}}
-						</div>
-					{{/if}}
-					{{stats-row stream=modalContext.stream withFlag=false}}
-					{{#unless modalContext.showLog}}
-						{{embedded-links tagName="section" class="content" text=modalContext.stream.title}}
-					{{else}}
-						{{modal-log log=modalContext.log}}
-					{{/unless}}
-				{{/modal-body}}
-			{{/if}}
-			{{#modal-footer}}
-				<div class="button-list-horizontal-wide">
-					{{form-button
-						action=(action "close")
-						classNames="btn-primary"
-						icon="fa-arrow-left"
-						title=(hotkey-title
-							context=this
-							action="close"
-							title=(t "modal.streaming.action.continue")
-						)
-					}}
-					{{form-button
-						action=(action "shutdown")
-						classNames="btn-danger"
-						icon="fa-times"
-						title=(hotkey-title
-							context=this
-							action="shutdown"
-							title=(t "modal.streaming.action.shutdown")
-						)
-					}}
-					{{form-button
-						action=(action "toggleLog")
-						classNameBindings=":btn-log modalContext.warning:btn-danger:btn-info modalContext.isWatching::invisible"
-						icon=(if modalContext.warning "fa-exclamation" "fa-ellipsis-v")
-						title=(hotkey-title
-							context=this
-							action="log"
-							title=(t "modal.streaming.action.log" provider=providerName)
-						)
-					}}
-				</div>
-				<div class="button-list-horizontal-wide">
-					{{open-chat user=modalContext.user}}
-					{{twitch-emotes user=modalContext.user}}
-					{{share-channel user=modalContext.user}}
-					{{channel-button user=modalContext.user}}
-				</div>
-				{{#drop-down
-					value=modalContext.quality
-					content=qualities
-					class="stream-quality-dropdown"
-					as |dropdown|
-				}}
-					{{#dropdown.selection as |selection|}}
-						{{t (concat "qualities." selection.value)}}
-					{{/dropdown.selection}}
-					{{#dropdown.list as |item|}}
-						{{t (concat "qualities." item.value)}}
-					{{/dropdown.list}}
-				{{/drop-down}}
-			{{/modal-footer}}
-		{{/if}}
-	{{else}}
-		{{#if isLogError}}
-			{{#modal-header}}
+	{{#modal-header}}
+		{{#if error}}
+			{{#if isLogError}}
 				{{t "modal.streaming.header.error.log"}}
-			{{/modal-header}}
-			{{#modal-body class="error"}}
-				{{error.message}}
-			{{/modal-body}}
-		{{else if isProviderError}}
-			{{#modal-header}}
+			{{else if isProviderError}}
 				{{t "modal.streaming.header.error.provider" provider=providerName}}
-			{{/modal-header}}
-			{{#modal-body class="error"}}
-				{{#if error.message}}
-					{{error.message}}
-					{{#if error.error.message}}
-						<br>{{error.error.message}}
-					{{/if}}
-					<br><br>
-				{{/if}}
-				{{t "modal.streaming.body.error.provider" provider=providerName}}
-			{{/modal-body}}
-		{{else if isPlayerError}}
-			{{#modal-header}}
+			{{else if isPlayerError}}
 				{{t "modal.streaming.header.error.player"}}
-			{{/modal-header}}
-			{{#modal-body class="error"}}
-				{{t "modal.streaming.body.error.player"}}
-			{{/modal-body}}
-		{{else if isVersionError}}
-			{{#modal-header}}
+			{{else if isVersionError}}
 				{{t "modal.streaming.header.error.version" provider=providerName}}
-			{{/modal-header}}
-			{{#modal-body class="error"}}
-				{{t "modal.streaming.body.error.version" version=error.message required=versionMin}}
-			{{/modal-body}}
-		{{else if isUnableToOpenError}}
-			{{#modal-header}}
+			{{else if isUnableToOpenError}}
 				{{t "modal.streaming.header.error.unable-to-open"}}
-			{{/modal-header}}
-			{{#modal-body class="error"}}
-				{{t "modal.streaming.body.error.unable-to-open" provider=providerName}}
-			{{/modal-body}}
-		{{else if isNoStreamsFoundError}}
-			{{#modal-header}}
+			{{else if isNoStreamsFoundError}}
 				{{t "modal.streaming.header.error.no-streams-found"}}
-			{{/modal-header}}
-			{{#modal-body class="error"}}
-				{{t "modal.streaming.body.error.no-streams-found" provider=providerName}}
-			{{/modal-body}}
-		{{else if isTimeoutError}}
-			{{#modal-header}}
+			{{else if isTimeoutError}}
 				{{t "modal.streaming.header.error.timeout"}}
-			{{/modal-header}}
-			{{#modal-body class="error"}}
-				{{t "modal.streaming.body.error.timeout" name=modalContext.user.detailedName}}
-			{{/modal-body}}
-		{{else}}
-			{{#modal-header}}
+			{{else}}
 				{{t "modal.streaming.header.error.internal"}}
-			{{/modal-header}}
-			{{#modal-body class="error"}}
-				{{#if error.message}}
-					{{error.message}}
+			{{/if}}
+		{{else if preparing}}
+			{{t "modal.streaming.header.preparing"}}
+		{{else}}
+			{{#link-to "channel" modalContext.user.id tabindex=0}}
+				{{#if modalContext.hasEnded}}
+					{{t "modal.streaming.header.ended" channel=modalContext.user.detailedName}}
+				{{else if modalContext.isLaunching}}
+					{{t "modal.streaming.header.launching" channel=modalContext.user.detailedName}}
+				{{else}}
+					{{t "modal.streaming.header.watching" channel=modalContext.user.detailedName}}
+				{{/if}}
+			{{/link-to}}
+		{{/if}}
+	{{/modal-header}}
+	{{#modal-body}}
+		{{#if error}}
+			<p class="streaming-message" role="alert">
+				{{#if isProviderError}}
+					{{t "modal.streaming.body.error.provider" provider=providerName}}
+				{{else if isPlayerError}}
+					{{t "modal.streaming.body.error.player"}}
+				{{else if isVersionError}}
+					{{t "modal.streaming.body.error.version" version=error.message required=versionMin}}
+				{{else if isUnableToOpenError}}
+					{{t "modal.streaming.body.error.unable-to-open" provider=providerName}}
+				{{else if isNoStreamsFoundError}}
+					{{t "modal.streaming.body.error.no-streams-found" provider=providerName}}
+				{{else if isTimeoutError}}
+					{{t "modal.streaming.body.error.timeout" name=modalContext.user.detailedName}}
+				{{else if hasDiagnostics}}
+					{{t "modal.streaming.body.error.diagnostics"}}
 				{{else}}
 					{{t "modal.streaming.body.error.internal"}}
 				{{/if}}
-			{{/modal-body}}
-		{{/if}}
-		{{#if modalContext.log.length}}
-			{{modal-log class="error" log=modalContext.log}}
-		{{/if}}
-	{{/unless}}
-	{{#if modalContext.hasEnded}}
-		{{#modal-footer}}
-			<div class="button-list-horizontal-wide">
-				{{#form-button
-					action=(action "shutdown")
-					classNames="btn-danger"
-					icon="fa-times"
-					title=(hotkey-title
-						context=this
-						action="close"
-						title=(t "modal.dialog.action.close")
-					)
-				}}
-					{{t "modal.dialog.action.close"}}
-				{{/form-button}}
-				{{#if (bool-or isNotFoundError isVersionError)}}
-					{{#form-button
-						action=(action "download")
-						classNames="btn-success"
-						icon="fa-download"
-						iconanim=true
-					}}
-						{{t "modal.streaming.action.download"}}
-					{{/form-button}}
-				{{else if modalContext.hasEnded}}
-					{{#form-button
-						action=(action "restart")
-						classNames="btn-success"
-						icon="fa-play"
-						iconanim=true
-						title=(hotkey-title
-							context=this
-							action="confirm"
-							title=(t "modal.streaming.action.restart")
-						)
-					}}
-						{{t "modal.streaming.action.restart"}}
-					{{/form-button}}
-				{{/if}}
+			</p>
+		{{else if preparing}}
+			<div class="streaming-progress" role="status">
+				{{loading-spinner}}
+				<span>{{modalContext.user.detailedName}}</span>
 			</div>
-		{{/modal-footer}}
-	{{/if}}
+		{{else if modalContext.hasEnded}}
+			<p class="streaming-message" role="status">{{t "modal.streaming.body.ended"}}</p>
+		{{else if modalContext.isLaunching}}
+			<div class="streaming-progress" role="status">
+				{{loading-spinner}}
+				<span>{{t "modal.streaming.body.launching" provider=providerName}}</span>
+			</div>
+		{{else if modalContext.isWatching}}
+			{{#if modalContext.stream.game_name}}
+				<div class="streaming-game">
+					{{#if modalContext.stream.game_id}}
+						{{#link-to "games.game" modalContext.stream.game_id tabindex=0}}
+							{{modalContext.stream.game_name}}
+						{{/link-to}}
+					{{else}}
+						{{modalContext.stream.game_name}}
+					{{/if}}
+				</div>
+			{{/if}}
+			{{stats-row stream=modalContext.stream withFlag=false}}
+			{{embedded-links tagName="section" class="streaming-description" text=modalContext.stream.title tabindex=0}}
+			<div class="streaming-quality">
+				<div class="streaming-quality-controls state-actions">
+					<label for="{{elementId}}-quality">{{t "modal.streaming.quality.label"}}</label>
+					<select
+						id="{{elementId}}-quality"
+						aria-describedby="{{elementId}}-quality-help"
+						onchange={{action (mut pendingQuality) value="target.value"}}
+					>
+						{{#each qualities as |quality|}}
+							<option value={{quality.id}} selected={{is-equal quality.id pendingQuality}}>
+								{{t (concat "qualities." quality.id)}}
+							</option>
+						{{/each}}
+					</select>
+					<button type="button" class="state-action" disabled={{unless qualityChanged true}} {{action "applyQuality"}}>
+						{{t "components.settings-submit.apply"}}
+					</button>
+				</div>
+				<p id="{{elementId}}-quality-help">{{t "modal.streaming.quality.restart"}}</p>
+			</div>
+		{{/if}}
+		{{#unless preparing}}
+			{{#if hasDiagnostics}}
+				<div class="streaming-diagnostics {{if modalContext.warning "has-warning"}}">
+					<button
+						type="button"
+						class="streaming-log-toggle"
+						aria-expanded={{if modalContext.showLog "true" "false"}}
+						aria-controls="{{elementId}}-diagnostics"
+						title={{hotkey-title context=this action="log" title=(t "modal.streaming.action.log" provider=providerName)}}
+						{{action "toggleLog"}}
+					>
+						<i class="fa {{if modalContext.showLog "fa-chevron-up" "fa-chevron-down"}}" aria-hidden="true"></i>
+						{{t "modal.streaming.action.log" provider=providerName}}
+						{{#if modalContext.warning}}
+							<i class="fa fa-exclamation-triangle" aria-hidden="true"></i>
+							<span class="sr-only">{{t "modal.streaming.body.warning"}}</span>
+						{{/if}}
+					</button>
+					<div class="streaming-diagnostics-content" id="{{elementId}}-diagnostics" hidden={{unless modalContext.showLog true}}>
+						{{#if modalContext.showLog}}
+							{{#if errorDetails}}
+								<p data-selectable>
+									{{errorDetails}}
+									{{#if error.error.message}}<br>{{error.error.message}}{{/if}}
+								</p>
+							{{/if}}
+							{{#if diagnosticLog.length}}
+								{{modal-log log=diagnosticLog}}
+							{{/if}}
+						{{/if}}
+					</div>
+				</div>
+			{{/if}}
+		{{/unless}}
+	{{/modal-body}}
+	{{#modal-footer}}
+		<div class="streaming-actions state-actions">
+			{{#if preparing}}
+				<button type="button" class="state-action" {{action "abort"}}>
+					{{t "modal.streaming.action.abort"}}
+				</button>
+			{{else if modalContext.hasEnded}}
+				<button type="button" class="state-action" {{action "shutdown"}}>
+					{{t "modal.dialog.action.close"}}
+				</button>
+				{{#if errorSettingsRoute}}
+					{{#if (bool-or isProviderError isVersionError)}}
+						<button type="button" class="state-action" {{action "download"}}>
+							{{t "modal.streaming.action.download"}}
+						</button>
+					{{/if}}
+					{{#unless isVersionError}}
+						<button type="button" class="state-action" {{action "restart"}}>
+							{{t "modal.streaming.action.restart"}}
+						</button>
+					{{/unless}}
+					<button
+						type="button"
+						class="state-action state-action-primary"
+						title={{hotkey-title context=this action="confirm" title=(t (if isPlayerError "modal.streaming.action.player-settings" "modal.streaming.action.provider-settings"))}}
+						{{action "openSettings"}}
+					>
+						{{t (if isPlayerError "modal.streaming.action.player-settings" "modal.streaming.action.provider-settings")}}
+					</button>
+				{{else}}
+					<button
+						type="button"
+						class="state-action state-action-primary"
+						title={{hotkey-title context=this action="confirm" title=(t "modal.streaming.action.restart")}}
+						{{action "restart"}}
+					>
+						{{t "modal.streaming.action.restart"}}
+					</button>
+				{{/if}}
+			{{else}}
+				<button
+					type="button"
+					class="state-action streaming-stop"
+					title={{hotkey-title context=this action="shutdown" title=(t "modal.streaming.action.shutdown")}}
+					{{action "shutdown"}}
+				>
+					{{t "modal.streaming.action.shutdown"}}
+				</button>
+				<button
+					type="button"
+					class="state-action state-action-primary"
+					title={{hotkey-title context=this action="close" title=(t "modal.streaming.action.continue")}}
+					{{action "close"}}
+				>
+					{{t "modal.streaming.action.continue"}}
+				</button>
+			{{/if}}
+		</div>
+		{{#unless (bool-or preparing modalContext.hasEnded)}}
+			<div class="streaming-tools">
+				{{open-chat user=modalContext.user}}
+				{{twitch-emotes user=modalContext.user}}
+				{{share-channel user=modalContext.user}}
+				{{channel-button user=modalContext.user}}
+			</div>
+		{{/unless}}
+	{{/modal-footer}}
 </div>

@@ -1,6 +1,10 @@
 error:
     header: エラー
     text: ページの読み込み中にエラーが発生しました
+    retry: 再試行
+    details: 技術情報
+loading:
+    message: 読み込み中…
 about:
     about:
         header: このアプリについて
@@ -136,18 +140,30 @@ search:
     header:
         all: "すべての検索結果"
         games: "カテゴリの検索結果："
-        channels: "ライブの検索結果："
+        channels: "チャンネルの検索結果："
     subheader:
         games: カテゴリ
         channels: チャンネル
-    empty: 何も見つかりませんでした…
+    empty: 結果が見つかりませんでした
+    empty-hint: 入力内容を確認するか、短いキーワードで検索してください。
+    empty-filtered-hint: 同じキーワードでカテゴリとチャンネルを検索できます。
+    search-all: カテゴリとチャンネルを検索
+    edit-query: 検索キーワードを編集
 watching:
-    header: 現在視聴中
+    header: "再生"
     buttons:
-        open: ダイアログを開く
-        close: ライブを閉じる
+        open: "詳細"
+        close: "停止"
+        dismiss: "一覧から削除"
+    status:
+        pending: "準備中"
+        starting: "起動中"
+        playing: "再生中"
+        failed: "失敗"
+        ended: "終了"
+    quality: "画質：{quality}"
     empty:
-        header: すべてのライブが終了しました
-        next: 次どうする？
-        streams: 人気のライブを視聴する
-        followed: フォロー中のライブを視聴する
+        header: "再生中の配信はありません"
+        next: "配信を開くと、ここで再生を管理できます。"
+        streams: "人気の配信を見る"
+        followed: "フォロー中の配信を見る"

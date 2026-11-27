@@ -1,7 +1,7 @@
 import { inject as service } from "@ember/service";
-import { main as mainConfig } from "config";
 import ModalDialogComponent from "../modal-dialog/component";
 import layout from "./template.hbs";
+import "./styles.less";
 
 
 export default ModalDialogComponent.extend( /** @class ModalFirstrunComponent */ {
@@ -11,13 +11,11 @@ export default ModalDialogComponent.extend( /** @class ModalFirstrunComponent */
 	layout,
 	classNames: [ "modal-firstrun-component" ],
 
-	name: mainConfig[ "display-name" ],
-
 
 	actions: {
 		/** @this {ModalFirstrunComponent} */
-		settings() {
-			this.router.transitionTo( "settings" );
+		settings( routeName ) {
+			this.router.transitionTo( routeName );
 			this.send( "close" );
 		}
 	}

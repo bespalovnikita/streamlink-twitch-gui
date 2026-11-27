@@ -1,6 +1,10 @@
 error:
     header: Erreur
     text: Une erreur est survenue en tentant d'afficher cette page.
+    retry: Réessayer
+    details: Détails techniques
+loading:
+    message: Chargement…
 about:
     about:
         header: À propos
@@ -141,14 +145,26 @@ search:
     subheader:
         games: Jeux
         channels: Chaînes
-    empty: Votre requête n'a renvoyé aucun résultat...
+    empty: Aucun résultat
+    empty-hint: Vérifiez l’orthographe ou essayez une recherche plus courte.
+    empty-filtered-hint: Vous pouvez lancer la même recherche dans les jeux et les chaînes.
+    search-all: Rechercher dans les jeux et les chaînes
+    edit-query: Modifier la recherche
 watching:
-    header: Vous regardez
+    header: "Lecture"
     buttons:
-        open: Ouvrir la boite de dialogue
-        close: Fermer le stream
+        open: "Détails"
+        close: "Arrêter"
+        dismiss: "Retirer"
+    status:
+        pending: "Préparation"
+        starting: "Démarrage"
+        playing: "En cours"
+        failed: "Échec"
+        ended: "Terminée"
+    quality: "Qualité : {quality}"
     empty:
-        header: Tous les streams ont été fermés
-        next: Que faire ensuite ?
-        streams: Regarder les top streams
-        followed: Regardez vos streams suivis
+        header: "Aucun stream actif"
+        next: "Lancez un stream pour gérer sa lecture ici."
+        streams: "Parcourir les streams populaires"
+        followed: "Voir les streams suivis"

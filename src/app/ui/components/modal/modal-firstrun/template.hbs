@@ -1,24 +1,21 @@
 <div>
-	{{#modal-header}}
-		{{name}}
+	{{#modal-header tagName="h2"}}
+		{{t "modal.firstrun.header"}}
 	{{/modal-header}}
 	{{#modal-body}}
-		{{t "modal.firstrun.body" name=name htmlSafe=true}}
+		<p>{{t "modal.firstrun.body"}}</p>
+		<div class="state-actions">
+			<button type="button" class="state-action" {{action "settings" "settings.streaming"}}>
+				{{t "modal.firstrun.action.streamlink"}}
+			</button>
+			<button type="button" class="state-action" {{action "settings" "settings.player"}}>
+				{{t "modal.firstrun.action.player"}}
+			</button>
+		</div>
 	{{/modal-body}}
-	{{#modal-footer classNames="button-list-horizontal"}}
-		{{#form-button
-			action=(action "close")
-			classNames="btn-primary"
-			icon="fa-arrow-left"
-		}}
+	{{#modal-footer classNames="state-actions"}}
+		<button type="button" class="state-action state-action-primary firstrun-continue" {{action "close"}}>
 			{{t "modal.firstrun.action.start"}}
-		{{/form-button}}
-		{{#form-button
-			action=(action "settings")
-			classNames="btn-success"
-			icon="fa-cog"
-		}}
-			{{t "modal.firstrun.action.settings"}}
-		{{/form-button}}
+		</button>
 	{{/modal-footer}}
 </div>

@@ -1,29 +1,28 @@
-
 .content-error {
-	@width: 8em;
-	@margin: .25em;
+	.error-details {
+		margin-top: 1rem;
+		border-top: 1px solid var(--ui-border);
 
-	h4 {
-		font-size: 1.2em;
-	}
+		> summary {
+			min-height: 32px;
+			padding: .5rem 0;
+			border-radius: 4px;
+			color: var(--ui-accent);
+			cursor: pointer;
+		}
 
-	dt {
-		width: @width;
-		margin-bottom: @margin;
-		text-align: left;
-	}
+		> dl {
+			display: grid;
+			grid-template-columns: minmax(5rem, max-content) minmax(0, 1fr);
+			gap: .25rem 1rem;
+			margin: .5rem 0 0;
+			color: var(--ui-text-muted);
+			overflow-wrap: anywhere;
+		}
 
-	dd {
-		margin: 0 0 @margin @width;
-	}
-
-	.stack {
-		font-family: monospace;
-		white-space: pre-wrap;
-
-		&::before,
-		&::after {
-			display: none;
+		.stack {
+			font-family: monospace;
+			white-space: pre-wrap;
 		}
 	}
 }

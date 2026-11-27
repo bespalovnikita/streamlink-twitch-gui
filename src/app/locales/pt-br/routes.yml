@@ -1,6 +1,10 @@
 error:
     header: Erro
     text: Houve um erro enquanto tentava mostrar esta página.
+    retry: Tentar novamente
+    details: Detalhes técnicos
+loading:
+    message: Carregando…
 about:
     about:
         header: Sobre
@@ -140,14 +144,26 @@ search:
     subheader:
         games: Jogos
         channels: Canais
-    empty: Sua requisição não encontrou nada...
+    empty: Nenhum resultado
+    empty-hint: Confira a ortografia ou tente uma busca mais curta.
+    empty-filtered-hint: Você pode repetir a mesma busca em jogos e canais.
+    search-all: Buscar em jogos e canais
+    edit-query: Editar busca
 watching:
-    header: Você está assistindo
+    header: "Reprodução"
     buttons:
-        open: Abrir caixa de diálogo
-        close: Fechar Stream
+        open: "Detalhes"
+        close: "Parar"
+        dismiss: "Remover"
+    status:
+        pending: "Preparando"
+        starting: "Iniciando"
+        playing: "Reproduzindo"
+        failed: "Falha"
+        ended: "Encerrada"
+    quality: "Qualidade: {quality}"
     empty:
-        header: Todas as streams foram fechadas
-        next: O que fazer a seguir?
-        streams: Assista às principais streams
-        followed: Assistir as streams que você segue
+        header: "Nenhuma transmissão ativa"
+        next: "Inicie uma transmissão para controlar a reprodução aqui."
+        streams: "Explorar transmissões populares"
+        followed: "Ver transmissões seguidas"

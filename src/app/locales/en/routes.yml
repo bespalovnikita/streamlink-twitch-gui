@@ -1,6 +1,10 @@
 error:
     header: Error
     text: There was an error while trying to display this page.
+    retry: Try again
+    details: Technical details
+loading:
+    message: Loading…
 about:
     about:
         header: About
@@ -137,18 +141,30 @@ search:
     header:
         all: All search results
         games: "Game search results: "
-        channels: "Stream search results: "
+        channels: "Channel search results: "
     subheader:
         games: Games
         channels: Channels
-    empty: Your query didn't match anything...
+    empty: No results found
+    empty-hint: Check the spelling or try a shorter query.
+    empty-filtered-hint: You can run the same search across games and channels.
+    search-all: Search games and channels
+    edit-query: Edit search query
 watching:
-    header: You're watching
+    header: "Playback"
     buttons:
-        open: Open dialog
-        close: Close stream
+        open: "Details"
+        close: "Stop"
+        dismiss: "Dismiss"
+    status:
+        pending: "Preparing"
+        starting: "Starting"
+        playing: "Playing"
+        failed: "Failed"
+        ended: "Ended"
+    quality: "Quality: {quality}"
     empty:
-        header: All streams have been closed
-        next: What to do next?
-        streams: Watch popular streams
-        followed: Watch your followed streams
+        header: "No active streams"
+        next: "Start a stream to manage playback here."
+        streams: "Browse popular streams"
+        followed: "See followed streams"

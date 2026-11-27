@@ -1,5 +1,5 @@
-import { set, computed } from "@ember/object";
-import { readOnly } from "@ember/object/computed";
+import { set, setProperties, computed } from "@ember/object";
+import { or, readOnly } from "@ember/object/computed";
 import { inject as service } from "@ember/service";
 import { streaming as streamingConfig } from "config";
 import ModalDialogComponent from "../modal-dialog/component";
@@ -31,17 +31,21 @@ function computedError( Class ) {
 	});
 }
 
+function isNativeControl( target ) {
+	return target && target.closest
+		&& target.closest( "button, a[href], summary, select, input, textarea, [contenteditable]" );
+}
+
 
 export default ModalDialogComponent.extend( /** @class ModalStreamingComponent */ {
 	/** @type {NwjsService} */
 	nwjs: service(),
+	/** @type {RouterService} */
+	router: service(),
 	/** @type {StreamingService} */
 	streaming: service(),
 	/** @type {SettingsService} */
 	settings: service(),
-	/** @type {DS.Store} */
-	store: service(),
-
 	layout,
 
 	classNames: [ "modal-streaming-component" ],
@@ -50,6 +54,9 @@ export default ModalDialogComponent.extend( /** @class ModalStreamingComponent *
 	modalContext: null,
 
 	error: readOnly( "modalContext.error" ),
+	preparing: computed( "modalContext.isPreparing", "modalContext.hasEnded", function() {
+		return this.modalContext.isPreparing && !this.modalContext.hasEnded;
+	}),
 
 	isLogError: computedError( LogError ),
 	isProviderError: computedError( ProviderError ),
@@ -59,7 +66,26 @@ export default ModalDialogComponent.extend( /** @class ModalStreamingComponent *
 	isNoStreamsFoundError: computedError( NoStreamsFoundError ),
 	isTimeoutError: computedError( TimeoutError ),
 
+	errorSettingsRoute: computed( "isPlayerError", "isProviderError", "isVersionError", function() {
+		if ( this.isPlayerError ) { return "settings.player"; }
+		if ( this.isProviderError || this.isVersionError ) { return "settings.streaming"; }
+		return null;
+	}),
+	errorDetails: computed( "error.message", "isVersionError", function() {
+		return this.isVersionError ? null : this.get( "error.message" );
+	}),
+	diagnosticLog: or( "error.log", "modalContext.log" ),
+	hasDiagnostics: or( "diagnosticLog.length", "errorDetails" ),
+
 	qualities,
+	pendingQuality: computed( "modalContext", "modalContext.quality", {
+		get() { return this.modalContext.quality; },
+		set( key, value ) { return value; }
+	}),
+	qualityChanged: computed( "pendingQuality", "modalContext.quality", function() {
+		return this.pendingQuality !== this.modalContext.quality;
+	}),
+
 	versionMin: computed( "settings.content.streaming.providerType", function() {
 		const type = this.settings.content.streaming.providerType;
 
@@ -68,12 +94,21 @@ export default ModalDialogComponent.extend( /** @class ModalStreamingComponent *
 
 	providerName: readOnly( "settings.content.streaming.providerName" ),
 
+	_confirmKeyDown: null,
+
+	keyDown( event ) {
+		if ( event.repeat ) { return; }
+		this._confirmKeyDown = this.modalContext.hasEnded && !isNativeControl( event.target )
+			? { code: event.code, context: this.modalContext }
+			: null;
+	},
+
 
 	hotkeysNamespace: "modalstreaming",
 	hotkeys: {
 		/** @this {ModalStreamingComponent} */
 		close() {
-			if ( this.modalContext.isPreparing ) {
+			if ( this.preparing ) {
 				this.send( "abort" );
 			} else if ( this.modalContext.hasEnded ) {
 				this.send( "shutdown" );
@@ -82,14 +117,24 @@ export default ModalDialogComponent.extend( /** @class ModalStreamingComponent *
 			}
 		},
 		/** @this {ModalStreamingComponent} */
-		confirm() {
-			if ( this.modalContext.hasEnded ) {
-				this.send( "restart" );
+		confirm( event ) {
+			// Enter on a play button can open this dialog before the global keyup handler runs.
+			const keyDown = this._confirmKeyDown;
+			this._confirmKeyDown = null;
+			if (
+				   !keyDown
+				|| keyDown.code !== event.code
+				|| keyDown.context !== this.modalContext
+				|| !this.modalContext.hasEnded
+				|| isNativeControl( event.target )
+			) {
+				return;
 			}
+			this.send( this.errorSettingsRoute ? "openSettings" : "restart" );
 		},
 		/** @this {ModalStreamingComponent} */
 		shutdown() {
-			if ( this.modalContext.isPreparing ) {
+			if ( this.preparing ) {
 				this.send( "abort" );
 			} else {
 				this.send( "shutdown" );
@@ -101,15 +146,24 @@ export default ModalDialogComponent.extend( /** @class ModalStreamingComponent *
 
 	actions: {
 		/** @this {ModalStreamingComponent} */
-		async download( success, failure ) {
-			try {
-				const providerType = this.settings.content.streaming.providerType;
-				this.nwjs.openBrowser( downloadUrl[ providerType ] );
-				await success();
-				this.send( "close" );
-			} catch ( err ) {
-				await failure( err );
-			}
+		download() {
+			const providerType = this.settings.content.streaming.providerType;
+			return this.nwjs.openBrowser( downloadUrl[ providerType ] );
+		},
+
+		/** @this {ModalStreamingComponent} */
+		openSettings() {
+			const { errorSettingsRoute, modal, modalContext, modalName, streaming } = this;
+			if ( !errorSettingsRoute ) { return; }
+
+			return this.router.transitionTo( errorSettingsRoute ).then(
+				() => {
+					if ( modalContext.isDestroyed || !modalContext.hasEnded ) { return; }
+					streaming.closeStream( modalContext.stream );
+					modal.closeModal( modalContext, modalName );
+				},
+				() => {}
+			);
 		},
 
 		/** @this {ModalStreamingComponent} */
@@ -129,21 +183,31 @@ export default ModalDialogComponent.extend( /** @class ModalStreamingComponent *
 		},
 
 		/** @this {ModalStreamingComponent} */
-		async restart( success ) {
+		restart() {
 			const { modalContext } = this;
-			if ( !modalContext.isDestroyed ) {
-				if ( success ) {
-					await success();
-				}
-				this.streaming.launchStream( modalContext )
-					.catch( () => {} );
+			if ( modalContext.isDestroyed || !modalContext.hasEnded ) { return; }
+
+			setProperties( modalContext, {
+				isPreparing: true,
+				error: null,
+				log: null,
+				showLog: false,
+				warning: false
+			});
+			return this.streaming.launchStream( modalContext ).catch( () => {} );
+		},
+
+		/** @this {ModalStreamingComponent} */
+		applyQuality() {
+			if ( this.modalContext.isWatching && this.qualityChanged ) {
+				set( this.modalContext, "quality", this.pendingQuality );
 			}
 		},
 
 		/** @this {ModalStreamingComponent} */
 		toggleLog() {
 			const { modalContext } = this;
-			if ( !modalContext.isDestroyed ) {
+			if ( !modalContext.isDestroyed && !this.preparing && this.hasDiagnostics ) {
 				modalContext.toggleProperty( "showLog" );
 			}
 		}

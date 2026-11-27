@@ -100,5 +100,11 @@ export default Route.extend({
 				? undefined
 				: () => getProperties( trans.to, "name", "params" )
 		);
+	},
+
+	actions: {
+		retry() {
+			this.router.refresh();
+		}
 	}
 });

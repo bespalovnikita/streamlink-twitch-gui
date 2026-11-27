@@ -1,6 +1,10 @@
 error:
     header: 錯誤
     text: 讀取頁面時發生錯誤
+    retry: 再試一次
+    details: 技術詳細資料
+loading:
+    message: 載入中…
 about:
     about:
         header: 關於
@@ -141,14 +145,26 @@ search:
     subheader:
         games: 遊戲
         channels: 頻道
-    empty: 查無資訊
+    empty: 找不到結果
+    empty-hint: 請檢查拼字，或試試較短的關鍵字。
+    empty-filtered-hint: 可以使用相同的關鍵字搜尋遊戲和頻道。
+    search-all: 搜尋遊戲和頻道
+    edit-query: 編輯搜尋內容
 watching:
-    header: 正在收看
+    header: "播放"
     buttons:
-        open: 開啟對話框
-        close: 關閉實況
+        open: "詳細資料"
+        close: "停止"
+        dismiss: "移除"
+    status:
+        pending: "準備中"
+        starting: "啟動中"
+        playing: "播放中"
+        failed: "失敗"
+        ended: "已結束"
+    quality: "畫質：{quality}"
     empty:
-        header: 所有實況已關閉
-        next: 下一步?
-        streams: 觀看熱門實況
-        followed: 觀看已追隨實況
+        header: "沒有正在播放的實況"
+        next: "開啟實況後，可在這裡管理播放。"
+        streams: "瀏覽熱門實況"
+        followed: "查看已追隨的實況"

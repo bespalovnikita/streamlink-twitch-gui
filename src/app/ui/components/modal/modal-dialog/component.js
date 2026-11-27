@@ -12,6 +12,10 @@ export default Component.extend( HotkeyMixin, {
 
 	tagName: "section",
 	classNameBindings: [ ":modal-dialog-component", "class" ],
+	attributeBindings: [ "role", "ariaModal:aria-modal", "tabindex" ],
+	role: "dialog",
+	ariaModal: "true",
+	tabindex: -1,
 
 	"class": "",
 
@@ -38,6 +42,22 @@ export default Component.extend( HotkeyMixin, {
 		});
 	},
 
+	didRender() {
+		this._super( ...arguments );
+		const { element } = this;
+		const header = element.querySelector( ".modal-header-component" );
+		if ( header ) {
+			element.setAttribute( "aria-labelledby", header.id );
+		} else {
+			element.removeAttribute( "aria-labelledby" );
+		}
+		const { activeElement, body } = element.ownerDocument;
+		if ( this._rendered && activeElement === body ) {
+			element.focus({ preventScroll: true });
+		}
+		this._rendered = true;
+	},
+
 	/*
 	 * This will be called synchronously, so we need to copy the element and animate it instead
 	 */
@@ -45,6 +65,8 @@ export default Component.extend( HotkeyMixin, {
 		const { element } = this;
 		let clone = element.cloneNode( true );
 		clone.classList.add( "fadeOut" );
+		clone.inert = true;
+		clone.setAttribute( "aria-hidden", "true" );
 		element.parentNode.appendChild( clone );
 		clone.addEventListener( "webkitAnimationEnd", () => {
 			clone.parentNode.removeChild( clone );

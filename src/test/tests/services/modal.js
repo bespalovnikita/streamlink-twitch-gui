@@ -2,7 +2,7 @@ import { module, test } from "qunit";
 import { setupRenderingTest } from "ember-qunit";
 import { buildResolver } from "test-utils";
 import { triggerEvent } from "event-utils";
-import { render } from "@ember/test-helpers";
+import { focus, render } from "@ember/test-helpers";
 import hbs from "htmlbars-inline-precompile";
 import sinon from "sinon";
 
@@ -369,9 +369,14 @@ module( "services/modal", function( hooks ) {
 				.map( elem => elem.innerText.replace( /\s+/g, "" ) )
 				.join( "" );
 
-		await render( hbs`{{modal-service}}` );
+		await render( hbs`
+			<button type="button" class="app-shell-part">Open dialog</button>
+			{{modal-service}}
+		` );
 		const wrapper = this.element.querySelector( ".modal-service-component" );
+		const opener = this.element.querySelector( ".app-shell-part" );
 		const replaceChildSpy = sinon.spy( wrapper, "replaceChild" );
+		await focus( opener );
 
 		// wrapper
 		assert.ok( wrapper instanceof HTMLElement, "Renders wrapper" );
@@ -386,6 +391,10 @@ module( "services/modal", function( hooks ) {
 		// foo 1 rendering
 		const modalFooOne = wrapper.querySelector( ".modal-dialog-component" );
 		assert.ok( modalFooOne instanceof HTMLElement, "Renders modal dialog" );
+		assert.strictEqual( modalFooOne.getAttribute( "role" ), "dialog", "Has dialog role" );
+		assert.strictEqual( modalFooOne.getAttribute( "aria-modal" ), "true", "Is modal" );
+		assert.strictEqual( document.activeElement, modalFooOne, "Moves focus into the dialog" );
+		assert.ok( opener.inert, "Blocks background controls while a dialog is open" );
 		assert.ok( modalFooOne.classList.contains( "modal-foo-component" ), "Has the right class" );
 		assert.strictEqual( getContent(), "[foo:1]", "Shows the foo modal one" );
 
@@ -415,6 +424,8 @@ module( "services/modal", function( hooks ) {
 		// foo 2 clone
 		const modalFooOneClone = wrapper.querySelector( ".modal-dialog-component.fadeOut" );
 		assert.ok( modalFooOneClone instanceof HTMLElement, "Foo two has a fadeOut clone" );
+		assert.ok( modalFooOneClone.inert, "A fading dialog cannot receive focus" );
+		assert.strictEqual( document.activeElement, modalBar, "Focus moves to the top dialog" );
 		await triggerEvent( modalFooOneClone, "webkitAnimationEnd" );
 		assert.notOk( modalFooOneClone.isConnected, "Clone gets removed from DOM after animation" );
 
@@ -429,5 +440,7 @@ module( "services/modal", function( hooks ) {
 		assert.notOk( modalService.isModalOpened, "No modal is opened anymore" );
 		assert.notOk( wrapper.classList.contains( "active" ), "Is inactive now" );
 		assert.strictEqual( getContent(), "", "All modals have been closed" );
+		assert.notOk( opener.inert, "Unblocks the application controls" );
+		assert.strictEqual( document.activeElement, opener, "Restores the opening control" );
 	});
 });

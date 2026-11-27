@@ -1,8 +1,8 @@
 import Component from "@ember/component";
-import { set, getWithDefault } from "@ember/object";
+import { set, setProperties, getWithDefault } from "@ember/object";
 import { sort } from "@ember/object/computed";
 import { on } from "@ember/object/evented";
-import { run } from "@ember/runloop";
+import { run, scheduleOnce } from "@ember/runloop";
 import { inject as service } from "@ember/service";
 import { vars as varsConfig } from "config";
 import HotkeyMixin from "ui/components/-mixins/hotkey";
@@ -19,6 +19,7 @@ const { filters } = Search;
 export default Component.extend( HotkeyMixin, /** @class SearchBarComponent */  {
 	/** @type {RouterService} */
 	router: service(),
+	searchBar: service( "search-bar" ),
 	/** @type {DS.Store} */
 	store: service(),
 
@@ -107,7 +108,7 @@ export default Component.extend( HotkeyMixin, /** @class SearchBarComponent */  
 	},
 
 
-	_prepareDropdown: on( "didInsertElement", function() {
+	_registerSearchBox: on( "didInsertElement", function() {
 		const { element } = this;
 		const searchBox = element.querySelector( ".search-box" );
 		this._onOutsideClick = ({ target }) => {
@@ -116,11 +117,26 @@ export default Component.extend( HotkeyMixin, /** @class SearchBarComponent */  
 			}
 		};
 		element.ownerDocument.body.addEventListener( "click", this._onOutsideClick );
+		this.searchBar.on( "displayQuery", this, this._displayQuery );
 	}),
 
-	_removeDropdownListener: on( "willDestroyElement", function() {
+	_unregisterSearchBox: on( "willDestroyElement", function() {
 		this.element.ownerDocument.body.removeEventListener( "click", this._onOutsideClick );
+		this.searchBar.off( "displayQuery", this, this._displayQuery );
 	}),
+
+	_displayQuery({ query, filter }, focus ) {
+		setProperties( this, { query, filter, showDropdown: false } );
+		if ( focus ) {
+			scheduleOnce( "afterRender", this, this._focusInput );
+		}
+	},
+
+	_focusInput() {
+		if ( this.element ) {
+			this.element.querySelector( "input[type='search']" ).focus();
+		}
+	},
 
 	focusIn({ target }) {
 		if ( target.matches( "input[type='search']" ) ) {
@@ -164,7 +180,7 @@ export default Component.extend( HotkeyMixin, /** @class SearchBarComponent */  
 		},
 
 		focus() {
-			this.element.querySelector( "input[type='search']" ).focus();
+			this._focusInput();
 		},
 
 		toggleDropdown() {
